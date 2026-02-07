@@ -3,17 +3,19 @@
 import { JobData } from "@/hooks/useJobPolling";
 
 const SEGMENT_COLORS: Record<string, string> = {
+  silence: "bg-zinc-300",
   speech: "bg-blue-500",
+  singing: "bg-teal-400",
   humming: "bg-green-500",
-  beatboxing: "bg-orange-500",
-  silence: "bg-zinc-300 dark:bg-zinc-600",
+  beatboxing: "bg-red-500",
 };
 
 const SEGMENT_LABELS: Record<string, string> = {
+  silence: "Silence",
   speech: "Speech",
+  singing: "Singing",
   humming: "Humming",
   beatboxing: "Beatboxing",
-  silence: "Silence",
 };
 
 interface Props {
