@@ -1,7 +1,12 @@
 import tempfile
 import os
+import uuid
+from pathlib import Path
 from musiclang_predict import MusicLangPredictor
 from musiclang import Score
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "midi-outputs"
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def _save_bytes_to_temp(data: bytes) -> str:
@@ -12,11 +17,9 @@ def _save_bytes_to_temp(data: bytes) -> str:
     return tmp.name
 
 
-def _create_temp_midi_path() -> str:
-    """Create a temp file path for output MIDI."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".mid", delete=False)
-    tmp.close()
-    return tmp.name
+def _create_output_midi_path() -> str:
+    """Create a unique output path in the midi-outputs folder."""
+    return str(OUTPUT_DIR / f"{uuid.uuid4().hex}.mid")
 
 
 def cleanup(path: str):
@@ -42,7 +45,7 @@ class MusicService:
         time_signature: tuple[int, int],
     ) -> str:
         """Generate music from scratch. Returns path to output MIDI file."""
-        output_path = _create_temp_midi_path()
+        output_path = _create_output_midi_path()
 
         if chord_progression:
             score = self.predictor.predict_chords(
@@ -77,7 +80,7 @@ class MusicService:
     ) -> str:
         """Extend an existing MIDI file. Returns path to output MIDI file."""
         input_path = _save_bytes_to_temp(midi_bytes)
-        output_path = _create_temp_midi_path()
+        output_path = _create_output_midi_path()
         try:
             original_score = Score.from_midi(input_path)
             generated_score = self.predictor.predict(
@@ -118,7 +121,7 @@ class MusicService:
     ) -> str:
         """Apply an LLM-produced edit plan to a MIDI file. Returns path to output MIDI."""
         input_path = _save_bytes_to_temp(midi_bytes)
-        output_path = _create_temp_midi_path()
+        output_path = _create_output_midi_path()
 
         try:
             action = edit_plan.get("action", "regenerate_with_chords")

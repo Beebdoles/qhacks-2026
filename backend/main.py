@@ -8,9 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from starlette.background import BackgroundTask
-
-from music_service import MusicService, cleanup
+from music_service import MusicService
 
 load_dotenv()
 
@@ -86,7 +84,6 @@ async def generate_music(request: GenerateRequest):
             output_path,
             media_type="audio/midi",
             filename="generated.mid",
-            background=BackgroundTask(cleanup, output_path),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -128,7 +125,6 @@ async def extend_music(
             output_path,
             media_type="audio/midi",
             filename="extended.mid",
-            background=BackgroundTask(cleanup, output_path),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -183,7 +179,6 @@ async def edit_music(
             output_path,
             media_type="audio/midi",
             filename="edited.mid",
-            background=BackgroundTask(cleanup, output_path),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

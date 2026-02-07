@@ -26,5 +26,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# MIDI outputs
+backend/midi-outputs/
+
 # Local experiments
 robert-test/
+chloe-test/
