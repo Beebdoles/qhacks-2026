@@ -1,29 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import AudioUpload from "@/components/AudioUpload";
+import ProcessingStatus from "@/components/ProcessingStatus";
+import SegmentTimeline from "@/components/SegmentTimeline";
+import TranscriptPanel from "@/components/TranscriptPanel";
+import ResultsPanel from "@/components/ResultsPanel";
+import { useJobPolling } from "@/hooks/useJobPolling";
 
 export default function Home() {
-  const [message, setMessage] = useState<string>("Loading...");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const job = useJobPolling(jobId);
 
-  useEffect(() => {
-    fetch("http://localhost:8000/api/hello")
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch(() => setMessage("Failed to connect to backend"));
-  }, []);
+  const phase =
+    !jobId || !job
+      ? "upload"
+      : job.status === "complete"
+        ? "results"
+        : "processing";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-col items-center gap-8 p-16">
-        <h1 className="text-4xl font-bold text-black dark:text-white">
-          QHacks 2026
-        </h1>
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="text-sm text-zinc-500">Backend says:</p>
-          <p className="mt-2 text-lg font-medium text-black dark:text-white">
-            {message}
-          </p>
+    <div className="min-h-screen bg-zinc-50 dark:bg-black font-sans">
+      <header className="border-b border-zinc-200 dark:border-zinc-800">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
+            Audio to MIDI
+          </h1>
+          {jobId && (
+            <button
+              onClick={() => setJobId(null)}
+              className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+            >
+              New Upload
+            </button>
+          )}
         </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 py-12 space-y-8">
+        {phase === "upload" && (
+          <>
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-2">
+                Upload your audio
+              </h2>
+              <p className="text-zinc-500">
+                Record speech, humming, and beatboxing. We'll convert it to
+                MIDI.
+              </p>
+            </div>
+            <AudioUpload onJobCreated={setJobId} />
+          </>
+        )}
+
+        {phase === "processing" && job && (
+          <>
+            <ProcessingStatus job={job} />
+            <SegmentTimeline job={job} />
+            {job.transcriptions.length > 0 && <TranscriptPanel job={job} />}
+          </>
+        )}
+
+        {phase === "results" && job && (
+          <>
+            <div className="text-center mb-4">
+              <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
+                Processing Complete
+              </h2>
+            </div>
+            <SegmentTimeline job={job} />
+            <TranscriptPanel job={job} />
+            <ResultsPanel job={job} />
+          </>
+        )}
       </main>
     </div>
   );
