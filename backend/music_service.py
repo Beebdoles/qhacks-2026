@@ -4,9 +4,16 @@ import uuid
 from pathlib import Path
 from musiclang_predict import MusicLangPredictor
 from musiclang import Score
+from basic_pitch.inference import predict as bp_predict, Model as BPModel
+from basic_pitch import ICASSP_2022_MODEL_PATH
+
+# Use CoreML model on macOS (TF SavedModel is incompatible with TF 2.20)
+_BP_MODEL = BPModel(Path(ICASSP_2022_MODEL_PATH).parent / "nmp.mlpackage")
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "midi-outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"}
 
 INSTRUMENT_ALIASES = {
     "guitar": "acoustic_guitar",
@@ -42,6 +49,32 @@ def cleanup(path: str):
         os.unlink(path)
     except OSError:
         pass
+
+
+def convert_audio_to_midi(audio_bytes: bytes, filename: str) -> bytes:
+    """Convert audio bytes (mp3/wav/etc.) to MIDI bytes using basic-pitch."""
+    suffix = Path(filename).suffix.lower() if filename else ".mp3"
+    tmp_audio = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_audio.write(audio_bytes)
+    tmp_audio.close()
+    try:
+        _, midi_data, _ = bp_predict(tmp_audio.name, model_or_model_path=_BP_MODEL)
+        midi_output = _create_output_midi_path()
+        midi_data.write(midi_output)
+        with open(midi_output, "rb") as f:
+            midi_bytes = f.read()
+        cleanup(midi_output)
+        return midi_bytes
+    finally:
+        cleanup(tmp_audio.name)
+
+
+def ensure_midi_bytes(file_bytes: bytes, filename: str) -> bytes:
+    """If the file is audio (mp3/wav/etc.), convert to MIDI. Otherwise return as-is."""
+    suffix = Path(filename).suffix.lower() if filename else ""
+    if suffix in AUDIO_EXTENSIONS:
+        return convert_audio_to_midi(file_bytes, filename)
+    return file_bytes
 
 
 class MusicService:
@@ -206,6 +239,37 @@ class MusicService:
             cleanup(input_path)
 
     # ------------------------------------------------------------------
+    # Change instrument (no generation, just swap)
+    # ------------------------------------------------------------------
+
+    def change_instrument(
+        self,
+        midi_bytes: bytes,
+        target_instrument: str,
+        tempo: int,
+        time_signature: tuple[int, int],
+    ) -> str:
+        """Change the instrument of a MIDI file. Returns path to output MIDI."""
+        target_instrument = self._normalize_instrument(target_instrument)
+        input_path = _save_bytes_to_temp(midi_bytes)
+        output_path = _create_output_midi_path()
+        try:
+            score = Score.from_midi(input_path)
+            original_instruments = list(score.instrument_names)
+            if not original_instruments:
+                raise ValueError("Input MIDI has no instruments")
+            # Rename the first (primary) instrument to the target
+            primary = original_instruments[0]
+            if primary != target_instrument:
+                score = score.replace_instruments_names(
+                    **{primary: target_instrument}
+                )
+            score.to_midi(output_path, tempo=tempo, time_signature=time_signature)
+            return output_path
+        finally:
+            cleanup(input_path)
+
+    # ------------------------------------------------------------------
     # Helpers for arrange / backtrack
     # ------------------------------------------------------------------
 
@@ -217,8 +281,14 @@ class MusicService:
 
     @staticmethod
     def _default_accompaniment(target_instrument: str) -> list[str]:
-        """Choose sensible default accompaniment instruments, excluding the target."""
-        defaults = ["piano", "acoustic_bass", "drums_0"]
+        """Choose a rich default accompaniment ensemble, excluding the target."""
+        defaults = [
+            "piano",           # chords / harmony
+            "acoustic_guitar", # rhythm chords
+            "acoustic_bass",   # bass line
+            "string_ensemble_1",  # pad / sustained chords
+            "drums_0",         # percussion
+        ]
         return [i for i in defaults if i != target_instrument]
 
     @staticmethod
@@ -244,13 +314,12 @@ class MusicService:
         return sum(merged_chords[1:], merged_chords[0])
 
     # ------------------------------------------------------------------
-    # Feature 2: Arrange (transcribe + accompaniment)
+    # Feature 2: Arrange (enhance existing MIDI with accompaniment)
     # ------------------------------------------------------------------
 
     def arrange(
         self,
         midi_bytes: bytes,
-        target_instrument: str,
         accompaniment_instruments: list[str] | None,
         nb_tokens: int,
         temperature: float,
@@ -258,12 +327,13 @@ class MusicService:
         rng_seed: int,
         tempo: int,
         time_signature: tuple[int, int],
+        target_instrument: str | None = None,
     ) -> str:
-        """Transcribe melody to target instrument and generate accompaniment.
+        """Keep existing notes/melody and generate accompaniment around them.
 
+        Optionally changes the primary instrument if target_instrument is provided.
         Returns path to the output MIDI file.
         """
-        target_instrument = self._normalize_instrument(target_instrument)
         input_path = _save_bytes_to_temp(midi_bytes)
         output_path = _create_output_midi_path()
         try:
@@ -272,31 +342,33 @@ class MusicService:
             chord_repr = original_score.to_chord_repr()
             chords_list = chord_repr.split()
 
-            # 2. Extract primary melody (first instrument)
-            original_instruments = list(original_score.instrument_names)
-            melody_instrument = original_instruments[0]
-            melody_score = original_score.get_instrument_names([melody_instrument])
+            # 2. Optionally change the primary instrument
+            if target_instrument:
+                target_instrument = self._normalize_instrument(target_instrument)
+                original_instruments = list(original_score.instrument_names)
+                if original_instruments and original_instruments[0] != target_instrument:
+                    original_score = original_score.replace_instruments_names(
+                        **{original_instruments[0]: target_instrument}
+                    )
 
-            # 3. Rename melody to target instrument
-            if melody_instrument != target_instrument:
-                melody_score = melody_score.replace_instruments_names(
-                    **{melody_instrument: target_instrument}
-                )
-
-            # 4. Determine accompaniment instruments
+            # 3. Determine accompaniment instruments (avoid colliding with existing)
+            existing_instruments = set(original_score.instrument_names)
             if accompaniment_instruments:
                 acc_instruments = [
                     self._normalize_instrument(i) for i in accompaniment_instruments
+                    if self._normalize_instrument(i) not in existing_instruments
                 ]
             else:
-                acc_instruments = self._default_accompaniment(target_instrument)
+                acc_instruments = self._default_accompaniment("")
+                acc_instruments = [
+                    i for i in acc_instruments
+                    if i not in existing_instruments
+                ]
 
-            # Remove target instrument from accompaniment to avoid collision
-            acc_instruments = [i for i in acc_instruments if i != target_instrument]
             if not acc_instruments:
-                acc_instruments = self._default_accompaniment(target_instrument)
+                acc_instruments = ["acoustic_guitar", "acoustic_bass", "drums_0"]
 
-            # 5. Build template and generate accompaniment
+            # 4. Build template and generate accompaniment
             template = [(chord, acc_instruments) for chord in chords_list]
             accompaniment_score = self.predictor.predict_chords_and_instruments(
                 template,
@@ -307,8 +379,8 @@ class MusicService:
                 rng_seed=rng_seed,
             )
 
-            # 6. Merge melody + accompaniment
-            combined = self._merge_scores(melody_score, accompaniment_score)
+            # 5. Merge original (kept intact) + accompaniment
+            combined = self._merge_scores(original_score, accompaniment_score)
             combined.to_midi(output_path, tempo=tempo, time_signature=time_signature)
             return output_path
         finally:

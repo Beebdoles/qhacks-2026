@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from music_service import MusicService
+from music_service import MusicService, ensure_midi_bytes, convert_audio_to_midi, _create_output_midi_path
 
 load_dotenv()
 
@@ -66,6 +66,32 @@ def health_check():
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from FastAPI!"}
+
+
+# --- Convert audio to MIDI ---
+
+
+@app.post("/api/convert")
+async def convert_to_midi(
+    file: UploadFile = File(...),
+):
+    """Convert an audio file (mp3, wav, etc.) to MIDI using basic-pitch."""
+    try:
+        audio_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            convert_audio_to_midi, audio_bytes, file.filename or "input.mp3"
+        )
+        output_path = _create_output_midi_path()
+        with open(output_path, "wb") as f:
+            f.write(midi_bytes)
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="converted.mid",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Conversion failed: {e}")
 
 
 # --- Feature 1: Generate from scratch ---
@@ -129,7 +155,10 @@ async def extend_music(
     time_signature_denominator: int = Form(4),
 ):
     try:
-        midi_bytes = await file.read()
+        raw_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            ensure_midi_bytes, raw_bytes, file.filename or ""
+        )
         time_signature = (time_signature_numerator, time_signature_denominator)
 
         async with app.state.predict_lock:
@@ -171,7 +200,10 @@ async def edit_music(
     time_signature_denominator: int = Form(4),
 ):
     try:
-        midi_bytes = await file.read()
+        raw_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            ensure_midi_bytes, raw_bytes, file.filename or ""
+        )
         time_signature = (time_signature_numerator, time_signature_denominator)
 
         # Step 1: Analyze the MIDI for LLM context
@@ -209,13 +241,50 @@ async def edit_music(
         raise HTTPException(status_code=500, detail=f"Edit failed: {e}")
 
 
-# --- Feature 4: Arrange (transcribe melody + generate accompaniment) ---
+# --- Feature 4: Change instrument ---
+
+
+@app.post("/api/change_instrument")
+async def change_instrument(
+    file: UploadFile = File(...),
+    target_instrument: str = Form(...),
+    tempo: int = Form(120),
+    time_signature_numerator: int = Form(4),
+    time_signature_denominator: int = Form(4),
+):
+    try:
+        raw_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            ensure_midi_bytes, raw_bytes, file.filename or ""
+        )
+        time_signature = (time_signature_numerator, time_signature_denominator)
+
+        output_path = await asyncio.to_thread(
+            app.state.music_service.change_instrument,
+            midi_bytes=midi_bytes,
+            target_instrument=target_instrument,
+            tempo=tempo,
+            time_signature=time_signature,
+        )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="changed_instrument.mid",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Instrument change failed: {e}")
+
+
+# --- Feature 5: Arrange (enhance existing MIDI with accompaniment) ---
 
 
 @app.post("/api/arrange")
 async def arrange_music(
     file: UploadFile = File(...),
-    target_instrument: str = Form(...),
+    target_instrument: Optional[str] = Form(None),
     accompaniment_instruments: Optional[str] = Form(None),
     nb_tokens: int = Form(4096),
     temperature: float = Form(0.9),
@@ -226,7 +295,10 @@ async def arrange_music(
     time_signature_denominator: int = Form(4),
 ):
     try:
-        midi_bytes = await file.read()
+        raw_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            ensure_midi_bytes, raw_bytes, file.filename or ""
+        )
         time_signature = (time_signature_numerator, time_signature_denominator)
 
         acc_list = None
@@ -237,7 +309,6 @@ async def arrange_music(
             output_path = await asyncio.to_thread(
                 app.state.music_service.arrange,
                 midi_bytes=midi_bytes,
-                target_instrument=target_instrument,
                 accompaniment_instruments=acc_list,
                 nb_tokens=nb_tokens,
                 temperature=temperature,
@@ -245,6 +316,7 @@ async def arrange_music(
                 rng_seed=rng_seed,
                 tempo=tempo,
                 time_signature=time_signature,
+                target_instrument=target_instrument,
             )
         return FileResponse(
             output_path,
@@ -275,7 +347,10 @@ async def make_backtrack(
     time_signature_denominator: int = Form(4),
 ):
     try:
-        midi_bytes = await file.read()
+        raw_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            ensure_midi_bytes, raw_bytes, file.filename or ""
+        )
         time_signature = (time_signature_numerator, time_signature_denominator)
 
         # Resolve backing instruments: explicit list > LLM style > defaults
