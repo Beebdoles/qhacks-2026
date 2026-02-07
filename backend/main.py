@@ -1,7 +1,47 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import traceback
+from contextlib import asynccontextmanager
+from typing import Optional
 
-app = FastAPI()
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
+
+from music_service import MusicService, cleanup
+
+load_dotenv()
+
+
+# --- Request schemas ---
+
+
+class GenerateRequest(BaseModel):
+    chord_progression: Optional[str] = Field(
+        None,
+        description="Chord progression like 'Am CM Dm E7 Am'. If omitted, generates freely.",
+    )
+    nb_tokens: int = Field(1024, ge=64, le=4096)
+    temperature: float = Field(0.9, gt=0.0, le=1.0)
+    topp: float = Field(1.0, gt=0.0, le=1.0)
+    rng_seed: int = Field(0, ge=0, description="0 for random")
+    tempo: int = Field(120, ge=40, le=300)
+    time_signature: tuple[int, int] = Field((4, 4))
+
+
+# --- App lifespan ---
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.music_service = MusicService()
+    app.state.predict_lock = asyncio.Lock()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -12,6 +52,9 @@ app.add_middleware(
 )
 
 
+# --- Existing endpoints ---
+
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
@@ -20,3 +63,130 @@ def health_check():
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from FastAPI!"}
+
+
+# --- Feature 1: Generate from scratch ---
+
+
+@app.post("/api/generate")
+async def generate_music(request: GenerateRequest):
+    try:
+        async with app.state.predict_lock:
+            output_path = await asyncio.to_thread(
+                app.state.music_service.generate,
+                chord_progression=request.chord_progression,
+                nb_tokens=request.nb_tokens,
+                temperature=request.temperature,
+                topp=request.topp,
+                rng_seed=request.rng_seed,
+                tempo=request.tempo,
+                time_signature=request.time_signature,
+            )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="generated.mid",
+            background=BackgroundTask(cleanup, output_path),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+
+
+# --- Feature 2: Extend existing MIDI ---
+
+
+@app.post("/api/extend")
+async def extend_music(
+    file: UploadFile = File(...),
+    nb_tokens: int = Form(512),
+    temperature: float = Form(0.9),
+    topp: float = Form(1.0),
+    rng_seed: int = Form(0),
+    tempo: int = Form(120),
+    time_signature_numerator: int = Form(4),
+    time_signature_denominator: int = Form(4),
+):
+    try:
+        midi_bytes = await file.read()
+        time_signature = (time_signature_numerator, time_signature_denominator)
+
+        async with app.state.predict_lock:
+            output_path = await asyncio.to_thread(
+                app.state.music_service.extend,
+                midi_bytes=midi_bytes,
+                nb_tokens=nb_tokens,
+                temperature=temperature,
+                topp=topp,
+                rng_seed=rng_seed,
+                tempo=tempo,
+                time_signature=time_signature,
+            )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="extended.mid",
+            background=BackgroundTask(cleanup, output_path),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Extension failed: {e}")
+
+
+# --- Feature 3: Edit via natural language ---
+
+
+@app.post("/api/edit")
+async def edit_music(
+    file: UploadFile = File(...),
+    instruction: str = Form(...),
+    nb_tokens: int = Form(1024),
+    temperature: float = Form(0.9),
+    topp: float = Form(1.0),
+    rng_seed: int = Form(0),
+    tempo: int = Form(120),
+    time_signature_numerator: int = Form(4),
+    time_signature_denominator: int = Form(4),
+):
+    try:
+        midi_bytes = await file.read()
+        time_signature = (time_signature_numerator, time_signature_denominator)
+
+        # Step 1: Analyze the MIDI for LLM context
+        analysis = await asyncio.to_thread(
+            app.state.music_service.analyze_midi, midi_bytes
+        )
+
+        # Step 2: Interpret the instruction via Gemini
+        from llm_service import interpret_edit_instruction
+
+        edit_plan = await interpret_edit_instruction(instruction, analysis)
+
+        # Step 3: Apply the edit plan
+        async with app.state.predict_lock:
+            output_path = await asyncio.to_thread(
+                app.state.music_service.apply_edit,
+                midi_bytes=midi_bytes,
+                edit_plan=edit_plan,
+                nb_tokens=nb_tokens,
+                temperature=temperature,
+                topp=topp,
+                rng_seed=rng_seed,
+                tempo=tempo,
+                time_signature=time_signature,
+            )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="edited.mid",
+            background=BackgroundTask(cleanup, output_path),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Edit failed: {e}")
