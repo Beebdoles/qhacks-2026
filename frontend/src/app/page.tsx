@@ -1,77 +1,133 @@
 "use client";
 
-import { useState } from "react";
-import AudioUpload from "@/components/AudioUpload";
-import ProcessingStatus from "@/components/ProcessingStatus";
-import SegmentTimeline from "@/components/SegmentTimeline";
-import MidiPlayer from "@/components/MidiPlayer";
-import { useJobPolling } from "@/hooks/useJobPolling";
+import { useCallback, useEffect } from "react";
+import { useEditorStore } from "@/stores/editorStore";
+import { useAnimationFrame } from "@/hooks/useAnimationFrame";
+import Toolbar from "@/components/Toolbar";
+import LayerPanel from "@/components/LayerPanel";
+import TimelineArea from "@/components/TimelineArea";
+import StatusBar from "@/components/StatusBar";
+import { audioEngine, setStoreGetter } from "@/lib/AudioEngine";
+import { fetchMidiAsArrayBuffer, parseMidiToTracks } from "@/lib/midi-utils";
+
+// Register store getter for AudioEngine (avoids circular import)
+setStoreGetter(() => useEditorStore.getState());
 
 export default function Home() {
-  const [jobId, setJobId] = useState<string | null>(null);
-  const job = useJobPolling(jobId);
+  const phase = useEditorStore((s) => s.phase);
+  const jobId = useEditorStore((s) => s.jobId);
 
-  const phase =
-    !jobId || !job
-      ? "upload"
-      : job.status === "complete"
-        ? "results"
-        : "processing";
+  // Drive playhead animation
+  useAnimationFrame();
+
+  // When entering editor phase, fetch and load MIDI
+  useEffect(() => {
+    if (phase !== "editor" || !jobId) return;
+
+    let cancelled = false;
+
+    async function loadMidi() {
+      try {
+        const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi`);
+        if (cancelled) return;
+
+        const { tracks, duration, bpm, timeSignature } = parseMidiToTracks(arrayBuffer);
+
+        const store = useEditorStore.getState();
+        store.setTracks(tracks);
+        store.setBpm(bpm);
+        store.setTimeSignature(timeSignature);
+        store.setTotalDuration(duration);
+        store.setCurrentTime(0);
+
+        await audioEngine.loadTracks(tracks);
+      } catch (err) {
+        console.error("Failed to load MIDI:", err);
+      }
+    }
+
+    loadMidi();
+    return () => { cancelled = true; };
+  }, [phase, jobId]);
+
+  // Sync mute toggles with audio engine GainNodes
+  useEffect(() => {
+    const unsub = useEditorStore.subscribe((state) => {
+      for (const track of state.tracks) {
+        audioEngine.setTrackMute(track.index, track.muted);
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Auto-stop at end of MIDI
+  useEffect(() => {
+    audioEngine.onEnd(() => {
+      useEditorStore.getState().setPlaying(false);
+      useEditorStore.getState().setCurrentTime(0);
+    });
+  }, []);
+
+  // Handle play/pause
+  const handlePlay = useCallback(async () => {
+    const store = useEditorStore.getState();
+    if (store.phase !== "editor") return;
+
+    await audioEngine.ensureStarted();
+
+    if (store.transport.playing) {
+      audioEngine.pause();
+      store.setPlaying(false);
+    } else {
+      audioEngine.play(store.tracks, store.transport.currentTime);
+      store.setPlaying(true);
+    }
+  }, []);
+
+  // Handle stop
+  const handleStop = useCallback(() => {
+    audioEngine.stop();
+    const store = useEditorStore.getState();
+    store.setPlaying(false);
+    store.setCurrentTime(0);
+  }, []);
+
+  // Handle seek
+  const handleSeek = useCallback((time: number) => {
+    const store = useEditorStore.getState();
+    store.setCurrentTime(time);
+    if (store.transport.playing) {
+      audioEngine.seek(store.tracks, time);
+    }
+  }, []);
+
+  // Handle export
+  const handleExport = useCallback(() => {
+    const store = useEditorStore.getState();
+    if (!store.jobId) return;
+    const url = `/api/jobs/${store.jobId}/midi`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "output.mid";
+    a.click();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black font-sans">
-      <header className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
-            Audio Segment Analyzer
-          </h1>
-          {jobId && (
-            <button
-              onClick={() => setJobId(null)}
-              className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-            >
-              New Upload
-            </button>
-          )}
-        </div>
-      </header>
+    <div className="flex flex-col h-screen w-screen">
+      {/* Toolbar */}
+      <Toolbar onPlay={handlePlay} onStop={handleStop} onExport={handleExport} />
 
-      <main className="max-w-3xl mx-auto px-4 py-12 space-y-8">
-        {phase === "upload" && (
-          <>
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-zinc-900 dark:text-white mb-2">
-                Upload your audio
-              </h2>
-              <p className="text-zinc-500">
-                Upload an MP3 file or record audio, and we&apos;ll classify the segments.
-              </p>
-            </div>
-            <AudioUpload onJobCreated={setJobId} />
-          </>
-        )}
+      {/* Main area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <LayerPanel />
 
-        {phase === "processing" && job && (
-          <>
-            <ProcessingStatus job={job} />
-            <SegmentTimeline job={job} />
-          </>
-        )}
+        {/* Timeline */}
+        <TimelineArea onSeek={handleSeek} />
+      </div>
 
-        {phase === "results" && job && (
-          <>
-            <div className="text-center mb-4">
-              <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
-                Analysis Complete
-              </h2>
-            </div>
-            <SegmentTimeline job={job} />
-            {job.midi_path && (
-              <MidiPlayer midiUrl={`/api/jobs/${job.id}/midi`} />
-            )}
-          </>
-        )}
-      </main>
+      {/* Status bar */}
+      <StatusBar />
     </div>
   );
 }

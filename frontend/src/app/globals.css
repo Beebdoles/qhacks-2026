@@ -1,38 +1,94 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surface colors */
+  --surface-900: #0D0D0D;
+  --surface-800: #1A1A1A;
+  --surface-700: #242424;
+  --surface-600: #2E2E2E;
+  --surface-500: #3A3A3A;
+
+  /* Text colors */
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-tertiary: #666666;
+
+  /* Accent */
+  --accent: #6366F1;
+  --accent-hover: #818CF8;
+
+  /* Semantic */
+  --recording: #EF4444;
+  --success: #10B981;
+  --warning: #F59E0B;
+
+  /* Border */
+  --border: #2E2E2E;
+
+  /* Layout */
+  --toolbar-height: 48px;
+  --sidebar-width: 240px;
+  --statusbar-height: 28px;
+  --ruler-height: 32px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface-900: var(--surface-900);
+  --color-surface-800: var(--surface-800);
+  --color-surface-700: var(--surface-700);
+  --color-surface-600: var(--surface-600);
+  --color-surface-500: var(--surface-500);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+
+  --color-recording: var(--recording);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --color-border: var(--border);
+
+  --font-sans: var(--font-sora);
+  --font-mono: var(--font-ibm-plex-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--surface-900);
+  color: var(--text-primary);
+  font-family: var(--font-sora), sans-serif;
+  overflow: hidden;
 }
 
-midi-player {
-  display: block;
-  width: 100%;
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-midi-visualizer {
-  display: block;
-  width: 100%;
-  height: 300px;
-  overflow-x: auto;
+::-webkit-scrollbar-track {
+  background: var(--surface-800);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-500);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Waveform animation for recording */
+@keyframes waveform {
+  from { height: 8px; }
+  to { height: 32px; }
 }
