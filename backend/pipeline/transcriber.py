@@ -1,8 +1,12 @@
+import concurrent.futures
+
 import numpy as np
 import soundfile as sf
 import whisper
 
 from models import Segment, Transcription
+
+TRANSCRIBE_TIMEOUT = 15  # seconds per segment
 
 _model = None
 
@@ -28,18 +32,29 @@ def transcribe_speech(
         audio_data = audio_data.mean(axis=1)
 
     transcriptions = []
-    for seg in speech_segments:
+    for i, seg in enumerate(speech_segments):
+        duration = seg.end - seg.start
+        print(f"[transcriber] Transcribing segment {i+1}/{len(speech_segments)}: {seg.start:.2f}-{seg.end:.2f}s ({duration:.1f}s)")
+
         start_sample = int(seg.start * sr)
         end_sample = int(seg.end * sr)
         chunk = audio_data[start_sample:end_sample]
 
         if len(chunk) < 1600:
+            print(f"[transcriber] Segment too short, skipping")
             continue
 
         # Whisper expects float32 numpy array at 16kHz
         chunk = chunk.astype(np.float32)
-        result = model.transcribe(chunk, fp16=False)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(model.transcribe, chunk, fp16=False)
+            try:
+                result = future.result(timeout=TRANSCRIBE_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                print(f"[transcriber] Whisper timed out on segment {seg.start:.2f}-{seg.end:.2f}s, skipping")
+                continue
         text = result.get("text", "").strip()
+        print(f"[transcriber] Result: \"{text}\"")
 
         if text:
             transcriptions.append(
