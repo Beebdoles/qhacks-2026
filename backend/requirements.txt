@@ -4,4 +4,3 @@ python-multipart
 pydantic
 google-genai
 python-dotenv
-pyannote.audio
