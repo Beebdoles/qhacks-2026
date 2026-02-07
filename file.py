@@ -1,5 +1,7 @@
 import json
+import tempfile
 
+import mido
 from google import genai
 from google.genai import types
 from musiclang.write.score import Score
@@ -99,8 +101,11 @@ def build_tonality(tonality_data):
     return getattr(base, quality)
 
 
-def build_score(gemini_json):
-    """Convert the full Gemini JSON into a MusicLang Score and metadata."""
+def build_scores_by_type(gemini_json):
+    """Group segments by type and build a separate MusicLang Score per type.
+
+    Returns dict: {"beatboxing": (Score, tempo, time_sig), "singing": (...), ...}
+    """
     tempo = int(gemini_json.get("tempo_bpm", 120))
     ts = gemini_json.get("time_signature", [4, 4])
     if isinstance(ts, list) and len(ts) == 2:
@@ -111,20 +116,105 @@ def build_score(gemini_json):
     tonality_data = gemini_json.get("tonality", {"degree": 1, "quality": "M"})
     tonality_obj = build_tonality(tonality_data)
 
-    chord_list = []
+    # Group chords by segment type
+    chords_by_type = {}
     for segment in gemini_json.get("segments", []):
         seg_type = segment.get("type", "")
-        if seg_type == "silence":
+        if seg_type in ("silence", "speech"):
             continue
         for chord_data in segment.get("chords", []):
-            chord_list.append(build_chord(chord_data, tonality_obj))
+            chords_by_type.setdefault(seg_type, []).append(
+                build_chord(chord_data, tonality_obj)
+            )
 
-    if not chord_list:
-        # Fallback: single rest chord
-        chord_list = [(I % tonality_obj)(piano=r.w)]
+    # Build one Score per type
+    scores = {}
+    for seg_type, chord_list in chords_by_type.items():
+        if not chord_list:
+            chord_list = [(I % tonality_obj)(piano=r.w)]
+        scores[seg_type] = (
+            Score(chord_list, tempo=tempo, time_signature=time_sig),
+            tempo,
+            time_sig,
+        )
 
-    score = Score(chord_list, tempo=tempo, time_signature=time_sig)
-    return score, tempo, time_sig
+    return scores
+
+
+# Channel + program assignments per segment type.
+# beatboxing → MIDI channel 9 (General MIDI drums)
+# singing    → channel 1, instrument chosen by Gemini (piano=0 or flute=73)
+# fallback   → channel 2, program 48 (string ensemble)
+SINGING_PROGRAMS = {"piano": 0, "flute": 73}
+
+TRACK_INSTRUMENTS = {
+    "beatboxing": {"channel": 9, "program": 0, "is_drum": True},
+    "singing":    {"channel": 1, "program": 73},
+    "humming":    {"channel": 1, "program": 73},
+}
+_next_fallback_channel = 2
+
+
+def _get_instrument(seg_type):
+    """Return (channel, program, is_drum) for a segment type."""
+    global _next_fallback_channel
+    if seg_type in TRACK_INSTRUMENTS:
+        cfg = TRACK_INSTRUMENTS[seg_type]
+        return cfg["channel"], cfg.get("program", 0), cfg.get("is_drum", False)
+    # Assign a fresh channel for unknown types
+    ch = _next_fallback_channel
+    _next_fallback_channel = min(_next_fallback_channel + 1, 15)
+    if ch == 9:  # skip drum channel
+        ch = _next_fallback_channel
+        _next_fallback_channel += 1
+    return ch, 48, False
+
+
+def merge_midis(midi_files, output_path):
+    """Merge per-type MIDI files into one multi-track MIDI (type 1).
+
+    Each segment type gets its own MIDI channel and instrument program,
+    so tracks are audibly distinct when played.
+
+    midi_files: {"beatboxing": "path.mid", "singing": "path.mid", ...}
+    """
+    combined = mido.MidiFile(type=1)
+    ticks = None
+    tempo_track_added = False
+
+    for seg_type, path in midi_files.items():
+        mid = mido.MidiFile(path)
+        if ticks is None:
+            combined.ticks_per_beat = mid.ticks_per_beat
+            ticks = mid.ticks_per_beat
+
+        channel, program, is_drum = _get_instrument(seg_type)
+
+        for track in mid.tracks:
+            new_track = mido.MidiTrack()
+            new_track.append(mido.MetaMessage("track_name", name=seg_type, time=0))
+            # Set instrument for this track
+            new_track.append(mido.Message("program_change", channel=channel, program=program, time=0))
+
+            for msg in track:
+                if msg.is_meta and msg.type in ("set_tempo", "time_signature"):
+                    if not tempo_track_added:
+                        new_track.append(msg)
+                    continue
+                if msg.is_meta and msg.type == "track_name":
+                    continue
+                # Remap channel on all channel messages (note_on, note_off, etc.)
+                if hasattr(msg, "channel") and not msg.is_meta:
+                    msg = msg.copy(channel=channel)
+                    # Skip existing program_change from MusicLang
+                    if msg.type == "program_change":
+                        continue
+                new_track.append(msg)
+
+            combined.tracks.append(new_track)
+            tempo_track_added = True
+
+    combined.save(output_path)
 
 
 # ── Gemini prompt ────────────────────────────────────────────────────
@@ -168,12 +258,13 @@ Return ONLY valid JSON with this exact structure:
 }}
 
 Guidelines:
-- For "beatboxing" segments, use percussive patterns with short durations (e/s) on piano or acoustic_guitar
-- For "singing" segments, create melodic lines with longer notes (q/h) on violin or flute
-- For "speech" segments, use rhythmic chord stabs on piano
-- Skip "silence" segments (they will be ignored)
+- For "beatboxing" segments, use percussive drum patterns with short durations (e/s) on piano in low octaves (-1, -2). These will become a percussion/drum track.
+- For "singing" or "humming" segments, create melodic lines with longer notes (q/h). These will become the melody track.
+  - You MUST also include a top-level "singing_instrument" field set to either "piano" or "flute" — pick whichever best matches the character of the singing (breathy/airy → flute, rhythmic/chordal → piano).
+- SKIP "speech" and "silence" segments entirely — do not include them in the output.
 - Each chord's total note durations should roughly match duration_beats in quarter notes
 - Use octave 0 as the default, -1 for bass, 1 for higher register
+- IMPORTANT: Each segment type will be exported as a separate MIDI file so they can be layered together. Design each type to sound good independently and when combined.
 """
 
 
@@ -182,7 +273,7 @@ Guidelines:
 def main():
     client = genai.Client()
 
-    audio_test = client.files.upload(file="test_audio_beatbox.mp3")
+    audio_test = client.files.upload(file="Recording.mp3")
     timeframes = """{
     "segments": [
       {"start": 0.0, "end": 2.1, "type": "speech"},
@@ -210,16 +301,30 @@ def main():
     print("Gemini response:")
     print(json.dumps(gemini_result, indent=2))
 
-    # Build MusicLang score
-    print("\nBuilding MusicLang score...")
-    score, tempo, time_sig = build_score(gemini_result)
-    print(f"  Tempo: {tempo} BPM")
-    print(f"  Time signature: {time_sig[0]}/{time_sig[1]}")
+    # Apply Gemini's instrument choice for singing/humming
+    singing_inst = gemini_result.get("singing_instrument", "piano")
+    program = SINGING_PROGRAMS.get(singing_inst, 73)
+    TRACK_INSTRUMENTS["singing"] = {"channel": 1, "program": program}
+    TRACK_INSTRUMENTS["humming"] = {"channel": 1, "program": program}
+    print(f"\nSinging instrument: {singing_inst} (program {program})")
 
-    # Export to MIDI
-    output_path = "output.mid"
-    score.to_midi(output_path)
-    print(f"\nMIDI file written to {output_path}")
+    # Build one MusicLang score per segment type
+    print("Building MusicLang scores by segment type...")
+    scores = build_scores_by_type(gemini_result)
+
+    # Export each type to its own file + collect for merging
+    midi_files = {}
+    for seg_type, (score, tempo, time_sig) in scores.items():
+        filename = f"output_{seg_type}.mid"
+        score.to_midi(filename)
+        midi_files[seg_type] = filename
+        print(f"  {seg_type} → {filename}  (tempo={tempo}, time_sig={time_sig[0]}/{time_sig[1]})")
+
+    # Merge all types into one multi-track MIDI
+    combined_path = "output.mid"
+    merge_midis(midi_files, combined_path)
+    print(f"\nCombined multi-track MIDI → {combined_path}")
+    print(f"Individual tracks: {', '.join(midi_files.values())}")
 
 
 if __name__ == "__main__":
