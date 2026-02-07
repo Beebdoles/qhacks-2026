@@ -26,8 +26,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# MIDI outputs
+# MIDI outputs and inputs
 backend/midi-outputs/
+backend/midi-inputs/
 
 # Local experiments
 robert-test/

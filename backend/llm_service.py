@@ -1,6 +1,95 @@
 import json
 import os
 
+
+# ---------------------------------------------------------------------------
+# Generation prompt: NL description → structured generation parameters
+# ---------------------------------------------------------------------------
+
+GENERATION_SYSTEM_PROMPT = """You are a music production assistant. Given a natural language description of music to generate, output a JSON object with generation parameters.
+
+Output format:
+{
+    "chord_progression": "<chord string or null>",
+    "tempo": <int 40-300>,
+    "temperature": <float 0.1-1.0>,
+    "time_signature": [<numerator>, <denominator>],
+    "nb_tokens": <int 256-4096>,
+    "explanation": "<brief explanation>"
+}
+
+Rules:
+- chord_progression: Use MusicLang chord format. One chord per bar.
+  Supported qualities: M (major), m (minor), 7, m7b5, sus2, sus4, m7, M7, dim, dim0
+  Bass notation: e.g. "Bm/D". Examples: "Am CM Dm E7", "CM FM GM CM"
+  Use null if the user does not specify a key or mood (free generation).
+- tempo: "slow" -> 70, "moderate" -> 110, "fast" -> 150, "upbeat" -> 140
+- temperature: "creative"/"experimental" -> 0.95, normal -> 0.9, "structured" -> 0.5
+- time_signature: Default [4, 4]. "waltz" -> [3, 4], "6/8" -> [6, 8]
+- nb_tokens: "short" -> 512, default -> 1024, "long" -> 2048
+
+Mood-to-chord mappings:
+- "sad"/"melancholic" -> minor keys: "Am Dm Em Am"
+- "happy"/"upbeat" -> major keys: "CM FM GM CM"
+- "jazzy" -> 7th chords: "CM7 Am7 Dm7 G7"
+- "dark"/"ominous" -> "Am Dm E7 Am" with slower tempo
+- "peaceful"/"calm" -> "CM Am FM GM" with slow tempo
+- "energetic" -> major keys, fast tempo, higher temperature
+
+Output ONLY valid JSON. No markdown fences, no extra text."""
+
+HARDCODED_GENERATION_RESPONSE = {
+    "chord_progression": "CM FM GM CM",
+    "tempo": 120,
+    "temperature": 0.9,
+    "time_signature": [4, 4],
+    "nb_tokens": 1024,
+    "explanation": "Hardcoded major-key generation for testing",
+}
+
+
+# ---------------------------------------------------------------------------
+# Backtrack style prompt: style description → instrument list
+# ---------------------------------------------------------------------------
+
+BACKTRACK_STYLE_PROMPT = """You are a music production assistant. Given a musical style description, output a JSON object specifying which instruments should be in the backing track.
+
+Output format:
+{
+    "instruments": ["instrument1", "instrument2", ...],
+    "explanation": "..."
+}
+
+Valid instrument names (use these exactly):
+piano, acoustic_guitar, jazz_guitar, clean_guitar, electric_bass_finger, acoustic_bass,
+fretless_bass, violin, viola, cello, contrabass, string_ensemble_1, flute, clarinet,
+oboe, trumpet, trombone, french_horn, alto_sax, tenor_sax, drums_0, vibraphone,
+drawbar_organ, harmonica, harp
+
+Style-to-instrument mappings:
+- "rock" -> ["distortion_guitar", "electric_bass_pick", "drums_0", "piano"]
+- "jazz" -> ["piano", "acoustic_bass", "drums_0", "tenor_sax"]
+- "pop" -> ["piano", "acoustic_guitar", "electric_bass_finger", "drums_0"]
+- "classical" -> ["violin", "viola", "cello", "contrabass", "flute"]
+- "funk" -> ["clean_guitar", "electric_bass_finger", "drums_0", "piano"]
+- "orchestral" -> ["violin", "viola", "cello", "contrabass", "flute", "oboe", "french_horn"]
+- "acoustic" -> ["acoustic_guitar", "acoustic_bass", "piano"]
+- "electronic" -> ["synth_bass_1", "pad_polysynth", "square_lead", "drums_0"]
+
+Choose 3-5 instruments that best match the style. Always include a bass instrument and a rhythmic element.
+
+Output ONLY valid JSON. No markdown fences, no extra text."""
+
+HARDCODED_BACKTRACK_RESPONSE = {
+    "instruments": ["piano", "acoustic_bass", "drums_0"],
+    "explanation": "Hardcoded default backing band for testing",
+}
+
+
+# ---------------------------------------------------------------------------
+# Edit prompt (existing): NL edit instruction → structured edit action
+# ---------------------------------------------------------------------------
+
 SYSTEM_PROMPT = """You are a music production assistant. Given an analysis of a MIDI file and a user's editing instruction, output a JSON object specifying how to modify the music.
 
 The MIDI analysis includes:
@@ -81,4 +170,50 @@ Output the JSON action:"""
     if text.startswith("```"):
         text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
 
+    return json.loads(text)
+
+
+async def interpret_generation_prompt(prompt: str) -> dict:
+    """Use Gemini to interpret a NL generation description into structured params."""
+    if USE_HARDCODED:
+        print(f"[HARDCODED] Ignoring generation prompt: '{prompt}', returning test response")
+        return HARDCODED_GENERATION_RESPONSE
+
+    import google.generativeai as genai
+    genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+    model = genai.GenerativeModel("gemini-2.0-flash")
+
+    full_prompt = f"""{GENERATION_SYSTEM_PROMPT}
+
+User description: "{prompt}"
+
+Output the JSON parameters:"""
+
+    response = await model.generate_content_async(full_prompt)
+    text = response.text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return json.loads(text)
+
+
+async def interpret_backtrack_style(style: str) -> dict:
+    """Use Gemini to interpret a style description into a list of backing instruments."""
+    if USE_HARDCODED:
+        print(f"[HARDCODED] Ignoring style: '{style}', returning test response")
+        return HARDCODED_BACKTRACK_RESPONSE
+
+    import google.generativeai as genai
+    genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+    model = genai.GenerativeModel("gemini-2.0-flash")
+
+    full_prompt = f"""{BACKTRACK_STYLE_PROMPT}
+
+Style description: "{style}"
+
+Output the JSON:"""
+
+    response = await model.generate_content_async(full_prompt)
+    text = response.text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     return json.loads(text)

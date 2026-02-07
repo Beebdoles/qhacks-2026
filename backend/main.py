@@ -17,6 +17,11 @@ load_dotenv()
 
 
 class GenerateRequest(BaseModel):
+    prompt: Optional[str] = Field(
+        None,
+        description="Natural language description, e.g. 'a sad piano piece in C minor at 80 BPM'. "
+        "When provided, the LLM resolves generation parameters automatically.",
+    )
     chord_progression: Optional[str] = Field(
         None,
         description="Chord progression like 'Am CM Dm E7 Am'. If omitted, generates freely.",
@@ -69,6 +74,23 @@ def hello():
 @app.post("/api/generate")
 async def generate_music(request: GenerateRequest):
     try:
+        # If a natural language prompt is given, resolve params via LLM first
+        if request.prompt:
+            from llm_service import interpret_generation_prompt
+
+            gen_params = await interpret_generation_prompt(request.prompt)
+            if gen_params.get("chord_progression"):
+                request.chord_progression = gen_params["chord_progression"]
+            if gen_params.get("tempo"):
+                request.tempo = gen_params["tempo"]
+            if gen_params.get("temperature"):
+                request.temperature = gen_params["temperature"]
+            if gen_params.get("nb_tokens"):
+                request.nb_tokens = gen_params["nb_tokens"]
+            ts = gen_params.get("time_signature")
+            if ts and isinstance(ts, (list, tuple)) and len(ts) == 2:
+                request.time_signature = tuple(ts)
+
         async with app.state.predict_lock:
             output_path = await asyncio.to_thread(
                 app.state.music_service.generate,
@@ -185,3 +207,107 @@ async def edit_music(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Edit failed: {e}")
+
+
+# --- Feature 4: Arrange (transcribe melody + generate accompaniment) ---
+
+
+@app.post("/api/arrange")
+async def arrange_music(
+    file: UploadFile = File(...),
+    target_instrument: str = Form(...),
+    accompaniment_instruments: Optional[str] = Form(None),
+    nb_tokens: int = Form(4096),
+    temperature: float = Form(0.9),
+    topp: float = Form(1.0),
+    rng_seed: int = Form(0),
+    tempo: int = Form(120),
+    time_signature_numerator: int = Form(4),
+    time_signature_denominator: int = Form(4),
+):
+    try:
+        midi_bytes = await file.read()
+        time_signature = (time_signature_numerator, time_signature_denominator)
+
+        acc_list = None
+        if accompaniment_instruments:
+            acc_list = [i.strip() for i in accompaniment_instruments.split(",")]
+
+        async with app.state.predict_lock:
+            output_path = await asyncio.to_thread(
+                app.state.music_service.arrange,
+                midi_bytes=midi_bytes,
+                target_instrument=target_instrument,
+                accompaniment_instruments=acc_list,
+                nb_tokens=nb_tokens,
+                temperature=temperature,
+                topp=topp,
+                rng_seed=rng_seed,
+                tempo=tempo,
+                time_signature=time_signature,
+            )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="arranged.mid",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Arrangement failed: {e}")
+
+
+# --- Feature 5: Backtrack (generate backing track for a melody) ---
+
+
+@app.post("/api/backtrack")
+async def make_backtrack(
+    file: UploadFile = File(...),
+    style: Optional[str] = Form(None),
+    backing_instruments: Optional[str] = Form(None),
+    nb_tokens: int = Form(4096),
+    temperature: float = Form(0.9),
+    topp: float = Form(1.0),
+    rng_seed: int = Form(0),
+    tempo: int = Form(120),
+    time_signature_numerator: int = Form(4),
+    time_signature_denominator: int = Form(4),
+):
+    try:
+        midi_bytes = await file.read()
+        time_signature = (time_signature_numerator, time_signature_denominator)
+
+        # Resolve backing instruments: explicit list > LLM style > defaults
+        if backing_instruments:
+            instruments_list = [i.strip() for i in backing_instruments.split(",")]
+        elif style:
+            from llm_service import interpret_backtrack_style
+
+            style_result = await interpret_backtrack_style(style)
+            instruments_list = style_result["instruments"]
+        else:
+            instruments_list = ["piano", "acoustic_bass", "drums_0"]
+
+        async with app.state.predict_lock:
+            output_path = await asyncio.to_thread(
+                app.state.music_service.make_backtrack,
+                midi_bytes=midi_bytes,
+                backing_instruments=instruments_list,
+                nb_tokens=nb_tokens,
+                temperature=temperature,
+                topp=topp,
+                rng_seed=rng_seed,
+                tempo=tempo,
+                time_signature=time_signature,
+            )
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="backtrack.mid",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Backtrack generation failed: {e}")
