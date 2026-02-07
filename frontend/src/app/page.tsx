@@ -4,8 +4,6 @@ import { useState } from "react";
 import AudioUpload from "@/components/AudioUpload";
 import ProcessingStatus from "@/components/ProcessingStatus";
 import SegmentTimeline from "@/components/SegmentTimeline";
-import TranscriptPanel from "@/components/TranscriptPanel";
-import ResultsPanel from "@/components/ResultsPanel";
 import { useJobPolling } from "@/hooks/useJobPolling";
 
 export default function Home() {
@@ -24,7 +22,7 @@ export default function Home() {
       <header className="border-b border-zinc-200 dark:border-zinc-800">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">
-            Audio to MIDI
+            Audio Segment Analyzer
           </h1>
           {jobId && (
             <button
@@ -45,8 +43,7 @@ export default function Home() {
                 Upload your audio
               </h2>
               <p className="text-zinc-500">
-                Record speech, humming, and beatboxing. We'll convert it to
-                MIDI.
+                Upload an MP3 file or record audio, and we&apos;ll classify the segments.
               </p>
             </div>
             <AudioUpload onJobCreated={setJobId} />
@@ -57,7 +54,6 @@ export default function Home() {
           <>
             <ProcessingStatus job={job} />
             <SegmentTimeline job={job} />
-            {job.transcriptions.length > 0 && <TranscriptPanel job={job} />}
           </>
         )}
 
@@ -65,12 +61,10 @@ export default function Home() {
           <>
             <div className="text-center mb-4">
               <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">
-                Processing Complete
+                Analysis Complete
               </h2>
             </div>
             <SegmentTimeline job={job} />
-            <TranscriptPanel job={job} />
-            <ResultsPanel job={job} />
           </>
         )}
       </main>

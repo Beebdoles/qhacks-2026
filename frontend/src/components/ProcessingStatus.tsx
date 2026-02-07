@@ -3,18 +3,14 @@
 import { JobData } from "@/hooks/useJobPolling";
 
 const STEP_LABELS: Record<string, string> = {
-  "10": "Preprocessing audio...",
-  "25": "Detecting speech segments...",
-  "40": "Classifying audio segments...",
-  "55": "Transcribing speech...",
-  "70": "Extracting melody...",
-  "85": "Detecting drum hits...",
-  "95": "Assembling MIDI file...",
+  "10": "Uploading audio...",
+  "30": "Analyzing audio segments...",
+  "80": "Processing results...",
   "100": "Done!",
 };
 
 function getStepLabel(progress: number): string {
-  const thresholds = [10, 25, 40, 55, 70, 85, 95, 100];
+  const thresholds = [10, 30, 80, 100];
   for (const t of thresholds) {
     if (progress <= t) return STEP_LABELS[String(t)];
   }
