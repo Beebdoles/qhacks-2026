@@ -1,2 +1,10 @@
 fastapi
 uvicorn
+panns_inference
+pyannote.audio
+numpy
+librosa
+pydub
+tensorflow
+tensorflow-hub
+python-dotenv
