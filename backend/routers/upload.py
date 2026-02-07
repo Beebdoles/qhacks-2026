@@ -3,9 +3,10 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from models import JobStatus
-from pipeline.orchestrator import jobs, run_gemini_analysis
+from pipeline.orchestrator import jobs, run_pipeline
 
 router = APIRouter(prefix="/api")
 
@@ -53,8 +54,8 @@ async def upload_audio(file: UploadFile):
     # Initialize job
     jobs[job_id] = JobStatus(id=job_id, status="pending", progress=0)
 
-    # Launch Gemini analysis in background
-    _executor.submit(run_gemini_analysis, job_id, input_path)
+    # Launch full pipeline in background
+    _executor.submit(run_pipeline, job_id, input_path)
 
     return {"job_id": job_id}
 
@@ -65,3 +66,17 @@ async def get_job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.get("/jobs/{job_id}/midi")
+async def get_midi(job_id: str):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.midi_path or not os.path.isfile(job.midi_path):
+        raise HTTPException(status_code=404, detail="MIDI not ready yet")
+    return FileResponse(
+        job.midi_path,
+        media_type="audio/midi",
+        filename="output.mid",
+    )

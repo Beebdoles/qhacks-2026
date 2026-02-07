@@ -2,19 +2,20 @@
 
 import { JobData } from "@/hooks/useJobPolling";
 
-const STEP_LABELS: Record<string, string> = {
-  "10": "Uploading audio...",
-  "30": "Analyzing audio segments...",
-  "80": "Processing results...",
-  "100": "Done!",
+const STAGE_LABELS: Record<string, string> = {
+  gemini_analysis: "Analyzing audio with AI...",
+  score_building: "Building musical scores...",
+  instrument_mapping: "Mapping instruments...",
+  midi_merging: "Merging MIDI tracks...",
+  complete: "Done!",
 };
 
-function getStepLabel(progress: number): string {
-  const thresholds = [10, 30, 80, 100];
-  for (const t of thresholds) {
-    if (progress <= t) return STEP_LABELS[String(t)];
-  }
-  return "Processing...";
+function getStepLabel(stage: string, progress: number): string {
+  if (stage && STAGE_LABELS[stage]) return STAGE_LABELS[stage];
+  if (progress <= 10) return "Uploading audio...";
+  if (progress <= 30) return "Analyzing audio segments...";
+  if (progress <= 80) return "Processing results...";
+  return "Done!";
 }
 
 interface Props {
@@ -37,7 +38,7 @@ export default function ProcessingStatus({ job }: Props) {
     );
   }
 
-  const label = getStepLabel(job.progress);
+  const label = getStepLabel(job.stage, job.progress);
 
   return (
     <div className="w-full max-w-lg mx-auto">

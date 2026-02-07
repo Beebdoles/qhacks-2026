@@ -10,7 +10,9 @@ export interface JobData {
   id: string;
   status: "pending" | "processing" | "complete" | "failed";
   progress: number;
+  stage: string;
   segments: Segment[];
+  midi_path: string | null;
   error: string | null;
 }
 

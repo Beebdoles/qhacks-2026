@@ -4,6 +4,7 @@ import { useState } from "react";
 import AudioUpload from "@/components/AudioUpload";
 import ProcessingStatus from "@/components/ProcessingStatus";
 import SegmentTimeline from "@/components/SegmentTimeline";
+import MidiPlayer from "@/components/MidiPlayer";
 import { useJobPolling } from "@/hooks/useJobPolling";
 
 export default function Home() {
@@ -65,6 +66,9 @@ export default function Home() {
               </h2>
             </div>
             <SegmentTimeline job={job} />
+            {job.midi_path && (
+              <MidiPlayer midiUrl={`/api/jobs/${job.id}/midi`} />
+            )}
           </>
         )}
       </main>
