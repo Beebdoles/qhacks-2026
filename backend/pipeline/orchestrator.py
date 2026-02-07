@@ -1,93 +1,84 @@
 import os
 import subprocess
-import time
 import traceback
 
-from google import genai
-
-from models import JobStatus, Segments
+from models import JobStatus
+from pipeline.stage_gemini import run_gemini_stage
+from pipeline.stage_score_builder import run_score_builder_stage
+from pipeline.stage_instrument_mapper import run_instrument_mapper_stage
+from pipeline.stage_midi_merger import run_midi_merger_stage
 
 # In-memory job store
 jobs: dict[str, JobStatus] = {}
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-PROMPT = """Analyze the provided audio file and produce a timeline of non-overlapping segments that covers the entire duration from start to finish.
-
-Classify each segment as one of the following types:
-- "silence": No meaningful audio activity, background noise, or non-vocal sounds.
-- "speech": Spoken words or talking with no melody. These will likely be instructions or conversations. Do not confuse with singing with lyrics.
-- "singing": Vocal singing with lyrics. These will likely be songs or vocal performances. Do not confuse with speech or humming.
-- "humming": Vocal humming — melodic, closed-mouth vocalization without words. Do not confuse with speech or singing with lyrics.
-- "beatboxing": Vocal percussion or beatboxing — rhythmic sounds produced with the mouth, lips, tongue, and voice to imitate drums and other instruments.
-
-Requirements:
-- Provide start and end timestamps in seconds (decimals allowed).
-- Segments must be contiguous with no gaps: each segment's start must equal the previous segment's end.
-- The first segment must start at 0 and the last segment must end at the total audio duration.
-- Segments must not overlap.
-- If audio is ambiguous, classify it as the closest matching type. Use "silence" for background noise or any non-vocal audio that doesn't fit the other categories.
-"""
-
-
-def run_gemini_analysis(job_id: str, audio_path: str) -> None:
-    """Analyze audio using Gemini API and update job state."""
+def run_pipeline(job_id: str, audio_path: str) -> None:
+    """Run the full audio-to-MIDI pipeline and update job state."""
     job = jobs[job_id]
     job.status = "processing"
+    job_dir = os.path.dirname(audio_path)
+    tag = f"[pipeline:{job_id[:8]}]"
 
     try:
-        # Convert WebM to MP3 (Gemini's JSON output fails on WebM input)
+        # ── Pre-processing: WebM → MP3 if needed ────────────────────
         upload_path = audio_path
         if audio_path.endswith(".webm"):
             mp3_path = audio_path.rsplit(".", 1)[0] + ".mp3"
-            print(f"[gemini:{job_id[:8]}] Converting WebM to MP3...")
+            print(f"{tag} Converting WebM to MP3...")
             subprocess.run(
                 ["ffmpeg", "-y", "-i", audio_path, mp3_path],
                 capture_output=True, check=True,
             )
             upload_path = mp3_path
 
-        # Upload file to Gemini
-        print(f"[gemini:{job_id[:8]}] Uploading audio to Gemini...")
-        job.progress = 10
-        myfile = client.files.upload(file=upload_path)
-        job.progress = 20
+        # ── Stage 1: Gemini Analysis ────────────────────────────────
+        job.stage = "gemini_analysis"
+        job.progress = 5
+        print(f"{tag} Stage 1: Gemini analysis...")
 
-        # Wait for Gemini to finish processing the file
-        while myfile.state.name == "PROCESSING":
-            print(f"[gemini:{job_id[:8]}] File still processing, waiting...")
-            time.sleep(2)
-            myfile = client.files.get(name=myfile.name)
+        analysis = run_gemini_stage(job_id, upload_path)
 
-        if myfile.state.name != "ACTIVE":
-            raise RuntimeError(f"Gemini file processing failed with state: {myfile.state.name}")
+        job.segments = analysis.segments
+        job.progress = 40
+        print(f"{tag} Stage 1 complete. {len(analysis.segments)} segments.")
 
-        # Call Gemini for analysis
-        print(f"[gemini:{job_id[:8]}] Analyzing audio segments...")
-        job.progress = 30
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=[PROMPT, myfile],
-            config={
-                "response_mime_type": "application/json",
-                "response_json_schema": Segments.model_json_schema(),
-            },
+        # ── Stage 2: Score Builder ──────────────────────────────────
+        job.stage = "score_building"
+        job.progress = 45
+        print(f"{tag} Stage 2: Building MusicLang scores...")
+
+        per_type_midis = run_score_builder_stage(analysis, job_dir)
+
+        job.progress = 65
+        print(f"{tag} Stage 2 complete. {len(per_type_midis)} type MIDIs.")
+
+        # ── Stage 3: Instrument Mapper ──────────────────────────────
+        job.stage = "instrument_mapping"
+        job.progress = 70
+        print(f"{tag} Stage 3: Mapping instruments...")
+
+        mapped_midis = run_instrument_mapper_stage(
+            per_type_midis, analysis.singing_instrument, job_dir
         )
 
-        # Parse response
-        print(f"[gemini:{job_id[:8]}] Processing results...")
         job.progress = 80
-        result = Segments.model_validate_json(response.text)
+        print(f"{tag} Stage 3 complete.")
 
-        job.segments = result.segments
+        # ── Stage 4: MIDI Merger ────────────────────────────────────
+        job.stage = "midi_merging"
+        job.progress = 85
+        print(f"{tag} Stage 4: Merging MIDI tracks...")
+
+        output_path = os.path.join(job_dir, "output.mid")
+        run_midi_merger_stage(mapped_midis, output_path)
+
+        job.midi_path = output_path
         job.progress = 100
+        job.stage = "complete"
         job.status = "complete"
-
-        for seg in result.segments:
-            print(f"[gemini:{job_id[:8]}]   {seg.type.value}: {seg.start:.2f}-{seg.end:.2f}s")
-        print(f"[gemini:{job_id[:8]}] Done! Found {len(result.segments)} segments")
+        print(f"{tag} Pipeline complete! MIDI at {output_path}")
 
     except Exception as e:
         job.status = "failed"
         job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
-        print(f"[pipeline:{job_id[:8]}] FAILED: {type(e).__name__}: {e}")
+        print(f"{tag} FAILED: {type(e).__name__}: {e}")
