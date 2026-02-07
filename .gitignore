@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environment variables
+.env
+.env.*
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local experiments
+robert-test/
