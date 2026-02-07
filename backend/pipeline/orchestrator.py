@@ -1,4 +1,5 @@
 import os
+import time
 import traceback
 
 import soundfile as sf
@@ -7,6 +8,19 @@ from models import JobStatus, Segment
 
 # In-memory job store
 jobs: dict[str, JobStatus] = {}
+
+
+def preload_modules():
+    """Import all heavy pipeline modules (call from background thread at startup)."""
+    print("[preload] Loading pipeline modules...")
+    from pipeline.preprocess import preprocess
+    from pipeline.segmenter import detect_speech_segments
+    from pipeline.classifier import classify_segments
+    from pipeline.transcriber import transcribe_speech
+    from pipeline.melody import extract_melody
+    from pipeline.drums import extract_drums
+    from pipeline.assembler import assemble_midi
+    print("[preload] All pipeline modules loaded.")
 
 
 def _get_audio_duration(wav_path: str) -> float:
@@ -44,68 +58,82 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         # Step 1: Preprocess
         print(f"[pipeline:{job_id[:8]}] Step 1/7: Preprocessing audio")
         job.progress = 10
+        t0 = time.time()
         from pipeline.preprocess import preprocess
         wav_path = preprocess(audio_path)
+        print(f"[pipeline:{job_id[:8]}] Step 1/7 done ({time.time() - t0:.1f}s)")
 
         duration = _get_audio_duration(wav_path)
         print(f"[pipeline:{job_id[:8]}] Audio duration: {duration:.1f}s")
 
         # Step 2: Silero VAD
-        print(f"[pipeline:{job_id[:8]}] Step 2/7: Detecting speech (Silero VAD)")
+        print(f"[pipeline:{job_id[:8]}] Step 2/7: Detecting speech (pyannote VAD)")
         job.progress = 25
+        t0 = time.time()
         from pipeline.segmenter import detect_speech_segments
         speech_segments = detect_speech_segments(wav_path)
-        print(f"[pipeline:{job_id[:8]}] Found {len(speech_segments)} speech segments")
+        print(f"[pipeline:{job_id[:8]}] Step 2/7 done ({time.time() - t0:.1f}s) — {len(speech_segments)} speech segments")
 
-        # Step 3: Classify non-speech segments
-        print(f"[pipeline:{job_id[:8]}] Step 3/7: Classifying non-speech (YAMNet)")
+        # Step 3: Classify ALL segments with YAMNet (including VAD-detected ones)
+        print(f"[pipeline:{job_id[:8]}] Step 3/7: Classifying all segments (YAMNet)")
         job.progress = 40
+        t0 = time.time()
         non_speech = _compute_non_speech_segments(speech_segments, duration)
 
-        from pipeline.classifier import classify_segments
-        classified = classify_segments(wav_path, non_speech)
+        # Combine VAD speech segments + gaps, classify everything with YAMNet
+        all_raw = sorted(speech_segments + non_speech, key=lambda s: s.start)
 
-        all_segments = sorted(speech_segments + classified, key=lambda s: s.start)
+        from pipeline.classifier import classify_segments
+        all_segments = classify_segments(wav_path, all_raw)
+
         job.segments = all_segments
+        print(f"[pipeline:{job_id[:8]}] Step 3/7 done ({time.time() - t0:.1f}s)")
         for seg in all_segments:
             print(f"[pipeline:{job_id[:8]}]   {seg.type}: {seg.start:.2f}-{seg.end:.2f}s")
 
-        # Step 4: Transcribe speech
-        print(f"[pipeline:{job_id[:8]}] Step 4/7: Transcribing speech (Whisper)")
+        # Step 4: Transcribe speech (only YAMNet-confirmed speech)
+        confirmed_speech = [s for s in all_segments if s.type == "speech"]
+        print(f"[pipeline:{job_id[:8]}] Step 4/7: Transcribing speech (Whisper) — {len(confirmed_speech)} segments")
         job.progress = 55
+        t0 = time.time()
         from pipeline.transcriber import transcribe_speech
-        transcriptions = transcribe_speech(wav_path, speech_segments)
+        transcriptions = transcribe_speech(wav_path, confirmed_speech)
         job.transcriptions = transcriptions
-        print(f"[pipeline:{job_id[:8]}] Got {len(transcriptions)} transcriptions")
+        print(f"[pipeline:{job_id[:8]}] Step 4/7 done ({time.time() - t0:.1f}s) — {len(transcriptions)} transcriptions")
 
         # Step 5: Extract melody from humming
         humming_segs = [s for s in all_segments if s.type == "humming"]
         print(f"[pipeline:{job_id[:8]}] Step 5/7: Extracting melody (BasicPitch) — {len(humming_segs)} humming segments")
         job.progress = 70
+        t0 = time.time()
         from pipeline.melody import extract_melody
         melody_notes = extract_melody(wav_path, humming_segs)
-        print(f"[pipeline:{job_id[:8]}] Got {len(melody_notes)} melody notes")
+        print(f"[pipeline:{job_id[:8]}] Step 5/7 done ({time.time() - t0:.1f}s) — {len(melody_notes)} melody notes")
 
         # Step 6: Extract drums from beatboxing
         beatbox_segs = [s for s in all_segments if s.type == "beatboxing"]
         print(f"[pipeline:{job_id[:8]}] Step 6/7: Extracting drums — {len(beatbox_segs)} beatbox segments")
         job.progress = 85
+        t0 = time.time()
         from pipeline.drums import extract_drums
         drum_hits = extract_drums(wav_path, beatbox_segs)
-        print(f"[pipeline:{job_id[:8]}] Got {len(drum_hits)} drum hits")
+        print(f"[pipeline:{job_id[:8]}] Step 6/7 done ({time.time() - t0:.1f}s) — {len(drum_hits)} drum hits")
 
         # Step 7: Assemble MIDI
         print(f"[pipeline:{job_id[:8]}] Step 7/7: Assembling MIDI")
         job.progress = 95
-        output_dir = os.path.dirname(audio_path)
+        t0 = time.time()
         from pipeline.assembler import assemble_midi
+        output_dir = os.path.dirname(audio_path)
         midi_path = assemble_midi(melody_notes, drum_hits, output_dir)
 
         job.midi_path = midi_path
         job.progress = 100
         job.status = "complete"
+        print(f"[pipeline:{job_id[:8]}] Step 7/7 done ({time.time() - t0:.1f}s)")
         print(f"[pipeline:{job_id[:8]}] Done! MIDI saved to {midi_path}")
 
     except Exception as e:
         job.status = "failed"
         job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"[pipeline:{job_id[:8]}] FAILED: {type(e).__name__}: {e}")

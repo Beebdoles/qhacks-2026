@@ -18,6 +18,8 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 @router.post("/upload")
 async def upload_audio(file: UploadFile):
+    print(f"[upload] Received file: {file.filename}")
+
     # Validate file type
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -31,6 +33,8 @@ async def upload_audio(file: UploadFile):
 
     # Read file and check size
     content = await file.read()
+    print(f"[upload] File transfer complete: {len(content)} bytes")
+
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
@@ -45,12 +49,14 @@ async def upload_audio(file: UploadFile):
     input_path = os.path.join(job_dir, f"input{ext}")
     with open(input_path, "wb") as f:
         f.write(content)
+    print(f"[upload] File saved to {input_path}")
 
     # Initialize job
     jobs[job_id] = JobStatus(id=job_id, status="pending", progress=0)
 
     # Launch pipeline in background
     _executor.submit(run_pipeline, job_id, input_path)
+    print(f"[upload] Job {job_id[:8]} submitted to executor")
 
     return {"job_id": job_id}
 

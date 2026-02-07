@@ -1,42 +1,39 @@
+import os
 import torch
 import torchaudio
-
+from pyannote.audio import Model
+from pyannote.audio.pipelines import VoiceActivityDetection
 from models import Segment
 
-_model = None
-_utils = None
+_pipeline = None
 
 
-def _load_model():
-    global _model, _utils
-    if _model is None:
-        _model, _utils = torch.hub.load(
-            "snakers4/silero-vad", "silero_vad", trust_repo=True
+def _load_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        token = os.environ.get("HF_TOKEN")
+        model = Model.from_pretrained(
+            "pyannote/segmentation-3.0",
+            token=token,
         )
-    return _model, _utils
+        _pipeline = VoiceActivityDetection(segmentation=model)
+        _pipeline.instantiate({
+            "min_duration_on": 0.05,
+            "min_duration_off": 0.1,
+        })
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _pipeline = _pipeline.to(device)
+    return _pipeline
 
 
 def detect_speech_segments(wav_16k_path: str) -> list[Segment]:
-    """Run Silero VAD to find speech segments."""
-    model, utils = _load_model()
-    get_speech_timestamps = utils[0]
-
+    """Run pyannote VAD to find speech segments."""
+    pipeline = _load_pipeline()
     waveform, sr = torchaudio.load(wav_16k_path)
-    # Silero expects mono 16kHz
-    waveform = waveform.squeeze(0)
-
-    speech_timestamps = get_speech_timestamps(
-        waveform, model, sampling_rate=16000, threshold=0.5
-    )
-
+    output = pipeline({"waveform": waveform, "sample_rate": sr})
     segments = []
-    for ts in speech_timestamps:
+    for speech in output.get_timeline().support():
         segments.append(
-            Segment(
-                start=ts["start"] / 16000.0,
-                end=ts["end"] / 16000.0,
-                type="speech",
-            )
+            Segment(start=speech.start, end=speech.end, type="speech")
         )
-
     return segments

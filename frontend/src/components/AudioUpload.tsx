@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "";
 const ACCEPTED = ".mp3,.wav,.m4a,.ogg,.flac,.webm";
 const MAX_SIZE_MB = 20;
 
@@ -41,9 +41,12 @@ export default function AudioUpload({ onJobCreated }: Props) {
     setUploading(true);
     setError(null);
 
+    console.log(`[upload] Upload initiated: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
     try {
       const form = new FormData();
       form.append("file", file);
+      console.log("[upload] Sending fetch request...");
       const res = await fetch(`${API_BASE}/api/upload`, {
         method: "POST",
         body: form,
@@ -51,12 +54,15 @@ export default function AudioUpload({ onJobCreated }: Props) {
 
       if (!res.ok) {
         const data = await res.json();
+        console.error(`[upload] Upload failed: ${res.status}`, data);
         throw new Error(data.detail || "Upload failed");
       }
 
       const { job_id } = await res.json();
+      console.log(`[upload] Response received: 200, job_id=${job_id}`);
       onJobCreated(job_id);
     } catch (err) {
+      console.error("[upload] Error caught:", err);
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);

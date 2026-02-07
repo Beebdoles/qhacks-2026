@@ -16,3 +16,4 @@ soundfile
 numpy
 imageio-ffmpeg
 python-dotenv
+pyannote.audio
