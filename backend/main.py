@@ -290,21 +290,47 @@ async def arrange_music(
     temperature: float = Form(0.9),
     topp: float = Form(1.0),
     rng_seed: int = Form(0),
-    tempo: int = Form(120),
-    time_signature_numerator: int = Form(4),
-    time_signature_denominator: int = Form(4),
+    tempo: Optional[int] = Form(None),
+    time_signature_numerator: Optional[int] = Form(None),
+    time_signature_denominator: Optional[int] = Form(None),
 ):
+    """Arrange a MIDI/audio file with auto-detected parameters and LLM-suggested accompaniment."""
     try:
         raw_bytes = await file.read()
         midi_bytes = await asyncio.to_thread(
             ensure_midi_bytes, raw_bytes, file.filename or ""
         )
-        time_signature = (time_signature_numerator, time_signature_denominator)
 
-        acc_list = None
+        # Step 1: Full analysis of the input MIDI
+        analysis = await asyncio.to_thread(
+            app.state.music_service.analyze_midi_full, midi_bytes
+        )
+
+        # Step 2: Get LLM arrangement suggestions
+        from llm_service import interpret_arrangement
+        arrangement = await interpret_arrangement(analysis)
+
+        # Step 3: Resolve parameters (user override > LLM suggestion > auto-detected)
+        if tempo is not None:
+            final_tempo = tempo
+        elif arrangement.get("tempo") is not None:
+            final_tempo = arrangement["tempo"]
+        else:
+            final_tempo = analysis["tempo"]
+
+        if time_signature_numerator is not None and time_signature_denominator is not None:
+            final_time_sig = (time_signature_numerator, time_signature_denominator)
+        else:
+            final_time_sig = tuple(analysis["time_signature"])
+
         if accompaniment_instruments:
             acc_list = [i.strip() for i in accompaniment_instruments.split(",")]
+        else:
+            acc_list = arrangement["accompaniment_instruments"]
 
+        enriched_chords = arrangement.get("chord_progression")
+
+        # Step 4: Generate the arrangement
         async with app.state.predict_lock:
             output_path = await asyncio.to_thread(
                 app.state.music_service.arrange,
@@ -314,8 +340,9 @@ async def arrange_music(
                 temperature=temperature,
                 topp=topp,
                 rng_seed=rng_seed,
-                tempo=tempo,
-                time_signature=time_signature,
+                tempo=final_tempo,
+                time_signature=final_time_sig,
+                chord_progression=enriched_chords,
                 target_instrument=target_instrument,
             )
         return FileResponse(

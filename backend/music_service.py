@@ -6,6 +6,8 @@ from musiclang_predict import MusicLangPredictor
 from musiclang import Score
 from basic_pitch.inference import predict as bp_predict, Model as BPModel
 from basic_pitch import ICASSP_2022_MODEL_PATH
+import pretty_midi
+import mido
 
 # Use CoreML model on macOS (TF SavedModel is incompatible with TF 2.20)
 _BP_MODEL = BPModel(Path(ICASSP_2022_MODEL_PATH).parent / "nmp.mlpackage")
@@ -151,6 +153,89 @@ class MusicService:
             return {
                 "instruments": list(score.instrument_names),
                 "duration": str(score.duration),
+            }
+        finally:
+            cleanup(input_path)
+
+    def analyze_midi_full(self, midi_bytes: bytes) -> dict:
+        """Comprehensive MIDI analysis for arrangement planning."""
+        input_path = _save_bytes_to_temp(midi_bytes)
+        try:
+            # --- musiclang analysis ---
+            score = Score.from_midi(input_path)
+            chord_repr = score.to_chord_repr()
+            chords_list = chord_repr.split()
+            instruments = list(score.instrument_names)
+            duration_quarters = float(score.duration)
+
+            # Key + Roman numerals
+            try:
+                key_str, roman_list = score.to_romantext_chord_list()
+            except Exception:
+                key_str, roman_list = "C", []
+
+            # Densities, octaves, amplitudes
+            try:
+                densities = score.extract_densities()
+            except Exception:
+                densities = {}
+            try:
+                mean_octaves = score.extract_mean_octaves()
+            except Exception:
+                mean_octaves = {}
+            try:
+                mean_amplitudes = score.extract_mean_amplitudes()
+            except Exception:
+                mean_amplitudes = {}
+
+            # --- pretty_midi for tempo + duration in seconds ---
+            pm = pretty_midi.PrettyMIDI(input_path)
+            try:
+                pm_tempo = round(pm.estimate_tempo())
+            except Exception:
+                pm_tempo = 120
+            duration_seconds = round(pm.get_end_time(), 2)
+
+            # --- mido for time_signature meta messages ---
+            mid = mido.MidiFile(input_path)
+            mido_ts = None
+            for track in mid.tracks:
+                for msg in track:
+                    if msg.type == "time_signature":
+                        mido_ts = (msg.numerator, msg.denominator)
+                        break
+                if mido_ts:
+                    break
+
+            final_time_sig = mido_ts if mido_ts else (4, 4)
+            final_tempo = pm_tempo if pm_tempo and pm_tempo > 0 else 120
+
+            # --- Complexity heuristic ---
+            avg_density = (
+                sum(densities.values()) / len(densities) if densities else 0
+            )
+            unique_chords = len(set(chords_list))
+            if unique_chords <= 2 and avg_density < 2.0:
+                complexity = "simple"
+            elif unique_chords >= 5 or avg_density > 5.0:
+                complexity = "complex"
+            else:
+                complexity = "moderate"
+
+            return {
+                "chord_progression": chord_repr,
+                "roman_numerals": roman_list,
+                "key": key_str,
+                "tempo": int(final_tempo),
+                "time_signature": final_time_sig,
+                "instruments": instruments,
+                "duration_quarters": duration_quarters,
+                "duration_seconds": duration_seconds,
+                "num_chords": len(chords_list),
+                "densities": {str(k): round(v, 2) for k, v in densities.items()},
+                "mean_octaves": {str(k): v for k, v in mean_octaves.items()},
+                "mean_amplitudes": {str(k): v for k, v in mean_amplitudes.items()},
+                "complexity": complexity,
             }
         finally:
             cleanup(input_path)
@@ -320,27 +405,32 @@ class MusicService:
     def arrange(
         self,
         midi_bytes: bytes,
-        accompaniment_instruments: list[str] | None,
+        accompaniment_instruments: list[str],
         nb_tokens: int,
         temperature: float,
         topp: float,
         rng_seed: int,
         tempo: int,
         time_signature: tuple[int, int],
+        chord_progression: str | None = None,
         target_instrument: str | None = None,
     ) -> str:
         """Keep existing notes/melody and generate accompaniment around them.
 
-        Optionally changes the primary instrument if target_instrument is provided.
+        Uses pre-resolved accompaniment instruments and optionally an LLM-enriched
+        chord progression. If chord_progression is None, extracts from the input.
         Returns path to the output MIDI file.
         """
         input_path = _save_bytes_to_temp(midi_bytes)
         output_path = _create_output_midi_path()
         try:
-            # 1. Load input and extract chord progression
+            # 1. Load input and determine chord progression
             original_score = Score.from_midi(input_path)
-            chord_repr = original_score.to_chord_repr()
-            chords_list = chord_repr.split()
+            if chord_progression:
+                chords_list = chord_progression.split()
+            else:
+                chord_repr = original_score.to_chord_repr()
+                chords_list = chord_repr.split()
 
             # 2. Optionally change the primary instrument
             if target_instrument:
