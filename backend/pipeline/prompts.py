@@ -1,6 +1,6 @@
-ANALYSIS_PROMPT = """Analyze the provided audio file and produce a complete musical analysis with two parts:
+ANALYSIS_PROMPT = """Analyze the provided audio file and produce an audio segmentation.
 
-## Part 1 — Audio Segmentation
+## Audio Segmentation
 
 Produce a timeline of non-overlapping segments that covers the entire duration from start to finish.
 
@@ -17,22 +17,4 @@ Segmentation requirements:
 - The first segment must start at 0 and the last segment must end at the total audio duration.
 - Segments must not overlap.
 - If audio is ambiguous, classify it as the closest matching type. Use "silence" for background noise or any non-vocal audio that doesn't fit the other categories.
-
-## Part 2 — Musical Structure (MusicLang-compatible)
-
-For each non-silence, non-speech segment, generate chord progressions with per-instrument melodies compatible with the MusicLang library:
-- Scale degrees 0-6 (not note names) for melody notes
-- Chord degrees 1-7 with quality "M" (major) or "m" (minor)
-- Duration codes: "w" (whole), "h" (half), "q" (quarter), "e" (eighth), "s" (sixteenth)
-- Instrument names: piano, violin, flute, cello, acoustic_guitar, etc.
-- A top-level tonality field (degree 1-7 + quality "M"/"m")
-
-Composition guidelines:
-- For "beatboxing" segments, use percussive drum patterns with short durations (e/s) on piano in low octaves (-1, -2). These will become a percussion/drum track.
-- For "singing" or "humming" segments, create melodic lines with longer notes (q/h). These will become the melody track.
-- You MUST set the top-level "singing_instrument" field to either "piano" or "flute" — pick whichever best matches the character of the singing (breathy/airy → flute, rhythmic/chordal → piano).
-- "speech" and "silence" segments should have empty chords arrays.
-- Each chord's total note durations should roughly match duration_beats in quarter notes.
-- Use octave 0 as the default, -1 for bass, 1 for higher register.
-- Each segment type will be exported as a separate MIDI file so they can be layered together. Design each type to sound good independently and when combined.
 """

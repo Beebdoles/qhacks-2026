@@ -4,6 +4,6 @@ python-multipart
 pydantic
 google-genai
 python-dotenv
-musiclang
-numpy<2.0
+# musiclang
+# numpy<2.0
 mido

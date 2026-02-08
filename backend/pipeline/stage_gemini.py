@@ -43,7 +43,7 @@ def run_gemini_stage(job_id: str, audio_path: str) -> GeminiAnalysis:
     result = GeminiAnalysis.model_validate_json(response.text)
 
     for seg in result.segments:
-        print(f"{tag}   {seg.type.value}: {seg.start:.2f}-{seg.end:.2f}s ({len(seg.chords)} chords)")
-    print(f"{tag} Done! {len(result.segments)} segments, tempo={result.tempo_bpm}")
+        print(f"{tag}   {seg.type.value}: {seg.start:.2f}-{seg.end:.2f}s")
+    print(f"{tag} Done! {len(result.segments)} segments")
 
     return result
