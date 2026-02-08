@@ -81,7 +81,7 @@ def _normalize_switch_instrument(params: dict) -> dict:
     """Normalize instrument name via aliases."""
     result = dict(params)
     if "instrument" in result:
-        name = str(result["instrument"]).strip().lower()
+        name = str(result["instrument"]).strip().lower().replace(" ", "_")
         result["instrument"] = INSTRUMENT_ALIASES.get(name, name)
     return result
 
@@ -90,7 +90,7 @@ def _normalize_mp3_to_midi(params: dict) -> dict:
     """Normalize mp3_to_midi params — mainly instrument alias resolution."""
     result = dict(params)
     if "instrument" in result:
-        name = str(result["instrument"]).strip().lower()
+        name = str(result["instrument"]).strip().lower().replace(" ", "_")
         result["instrument"] = INSTRUMENT_ALIASES.get(name, name)
     return result
 

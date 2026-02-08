@@ -106,18 +106,7 @@ def dispatch_tool_call(tool_call: ToolCall, job_dir: str) -> str:
     if tool_call.tool == ToolName.switch_instrument:
         midi_path = resolve_midi_path(tool_call, job_dir)
         print(f"{tag} switch_instrument → {midi_path}")
-        result = run_switch_instrument(tool_call, midi_path)
-
-        # Rename the file in saved_tracks/ to match the new instrument,
-        # replacing any existing file with that name
-        new_instrument = tool_call.params.get("instrument", "")
-        if new_instrument and midi_path.startswith(SAVED_TRACKS_DIR):
-            new_path = os.path.join(SAVED_TRACKS_DIR, f"{new_instrument}.mid")
-            if new_path != midi_path:
-                os.replace(midi_path, new_path)
-                print(f"{tag} Replaced {os.path.basename(midi_path)} → {os.path.basename(new_path)}")
-
-        return result
+        return run_switch_instrument(tool_call, midi_path)
 
     if tool_call.tool == ToolName.repeat_track:
         midi_path = resolve_midi_path(tool_call, job_dir)
