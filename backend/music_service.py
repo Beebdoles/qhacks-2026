@@ -8,6 +8,7 @@ from basic_pitch.inference import predict as bp_predict, Model as BPModel
 from basic_pitch import ICASSP_2022_MODEL_PATH
 import pretty_midi
 import mido
+import numpy as np
 
 # Use CoreML model on macOS (TF SavedModel is incompatible with TF 2.20)
 _BP_MODEL = BPModel(Path(ICASSP_2022_MODEL_PATH).parent / "nmp.mlpackage")
@@ -53,6 +54,125 @@ def cleanup(path: str):
         pass
 
 
+def _pitch_correct(y: np.ndarray, sr: int, frame_length: int = 2048,
+                   hop_length: int = 512) -> np.ndarray:
+    """Pitch-correct audio by snapping each frame to the nearest semitone."""
+    import librosa
+    from scipy.signal import medfilt
+
+    if len(y) < frame_length:
+        return y
+
+    # 1. Detect pitch with pYIN
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz('C2'),
+        fmax=librosa.note_to_hz('C7'),
+        sr=sr,
+        frame_length=frame_length,
+        hop_length=hop_length,
+    )
+
+    # 2. If no pitched content detected, return unchanged
+    if not np.any(voiced_flag):
+        return y
+
+    # 3. Compute per-frame correction in semitones
+    midi_continuous = librosa.hz_to_midi(f0)  # NaN for unvoiced
+    midi_quantized = np.round(midi_continuous)
+    correction = midi_quantized - midi_continuous
+
+    # Zero out correction for unvoiced frames
+    correction = np.where(np.isnan(correction), 0.0, correction)
+
+    # 4. Smooth with median filter to reduce jitter
+    correction = medfilt(correction, kernel_size=11)
+
+    # 5. Round corrections to nearest 0.1 semitone to reduce segment count
+    correction = np.round(correction * 10) / 10
+
+    # 6. Apply per-segment pitch shifting
+    n_frames = len(correction)
+    y_corrected = np.copy(y)
+
+    i = 0
+    while i < n_frames:
+        shift = correction[i]
+        j = i
+        while j < n_frames and correction[j] == shift:
+            j += 1
+
+        if abs(shift) >= 0.05:
+            sample_start = i * hop_length
+            sample_end = min(j * hop_length + frame_length, len(y))
+            segment = y[sample_start:sample_end]
+
+            if len(segment) >= frame_length:
+                shifted = librosa.effects.pitch_shift(
+                    segment, sr=sr, n_steps=float(shift)
+                )
+                actual_len = min(len(shifted), sample_end - sample_start)
+                y_corrected[sample_start:sample_start + actual_len] = shifted[:actual_len]
+
+        i = j
+
+    return y_corrected
+
+
+def _smooth_midi(midi_data: pretty_midi.PrettyMIDI,
+                  min_note_duration: float = 0.1,
+                  merge_gap: float = 0.05) -> pretty_midi.PrettyMIDI:
+    """Clean up MIDI by removing short artifacts and merging nearby same-pitch notes.
+
+    1. Remove notes shorter than min_note_duration (artifact blips).
+    2. Snap half-step outliers: if a short note is between two longer notes of the
+       same pitch, replace it with that pitch.
+    3. Merge consecutive notes of the same pitch separated by a small gap.
+    """
+    for instrument in midi_data.instruments:
+        if not instrument.notes:
+            continue
+
+        # Sort by start time
+        instrument.notes.sort(key=lambda n: n.start)
+
+        # --- Pass 1: Snap half-step outlier notes ---
+        # A short note that's 1 semitone off from both its neighbors (which share
+        # the same pitch) is almost certainly a detection artifact.
+        notes = instrument.notes
+        for i in range(1, len(notes) - 1):
+            prev_note = notes[i - 1]
+            curr_note = notes[i]
+            next_note = notes[i + 1]
+
+            curr_dur = curr_note.end - curr_note.start
+            if (curr_dur < min_note_duration * 2
+                    and prev_note.pitch == next_note.pitch
+                    and abs(curr_note.pitch - prev_note.pitch) == 1):
+                curr_note.pitch = prev_note.pitch
+
+        # --- Pass 2: Remove very short notes ---
+        notes = [n for n in notes if (n.end - n.start) >= min_note_duration]
+
+        # --- Pass 3: Merge consecutive same-pitch notes ---
+        if notes:
+            merged = [notes[0]]
+            for note in notes[1:]:
+                prev = merged[-1]
+                if (note.pitch == prev.pitch
+                        and note.start - prev.end <= merge_gap):
+                    # Extend the previous note
+                    prev.end = max(prev.end, note.end)
+                    prev.velocity = max(prev.velocity, note.velocity)
+                else:
+                    merged.append(note)
+            notes = merged
+
+        instrument.notes = notes
+
+    return midi_data
+
+
 def convert_audio_to_midi(audio_bytes: bytes, filename: str) -> bytes:
     """Convert audio bytes (mp3/wav/etc.) to MIDI bytes using basic-pitch."""
     suffix = Path(filename).suffix.lower() if filename else ".mp3"
@@ -69,6 +189,48 @@ def convert_audio_to_midi(audio_bytes: bytes, filename: str) -> bytes:
         return midi_bytes
     finally:
         cleanup(tmp_audio.name)
+
+
+def autotune_audio(audio_bytes: bytes, filename: str) -> bytes:
+    """Auto-tune audio (pitch-correct to nearest semitone) then convert to MIDI."""
+    import librosa
+    import soundfile as sf
+
+    suffix = Path(filename).suffix.lower() if filename else ".mp3"
+    tmp_audio = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_audio.write(audio_bytes)
+    tmp_audio.close()
+
+    tmp_corrected = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_corrected.close()
+
+    try:
+        # 1. Load audio
+        y, sr = librosa.load(tmp_audio.name, sr=22050)
+
+        # 2. Pitch-correct
+        y_corrected = _pitch_correct(y, sr)
+
+        # 3. Save corrected audio
+        sf.write(tmp_corrected.name, y_corrected, sr)
+
+        # 4. Run basic-pitch on corrected audio
+        _, midi_data, _ = bp_predict(
+            tmp_corrected.name, model_or_model_path=_BP_MODEL
+        )
+
+        # 5. Smooth MIDI: remove short artifacts, snap half-step outliers, merge
+        midi_data = _smooth_midi(midi_data)
+
+        midi_output = _create_output_midi_path()
+        midi_data.write(midi_output)
+        with open(midi_output, "rb") as f:
+            midi_bytes = f.read()
+        cleanup(midi_output)
+        return midi_bytes
+    finally:
+        cleanup(tmp_audio.name)
+        cleanup(tmp_corrected.name)
 
 
 def ensure_midi_bytes(file_bytes: bytes, filename: str) -> bytes:

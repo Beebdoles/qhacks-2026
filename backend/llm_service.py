@@ -33,7 +33,12 @@ Output format:
 }
 
 Rules:
-- chord_progression: Use MusicLang chord format. One chord per bar.
+- chord_progression: Use MusicLang chord format. ONE CHORD PER BAR. The number of chords
+  determines the song length! Each bar lasts (time_signature_numerator / tempo * 60) seconds.
+  To calculate how many chords you need: num_chords = desired_seconds / (numerator / tempo * 60)
+  Example: 30 seconds at 150 BPM in 4/4 = 30 / (4/150*60) = 30 / 1.6 = ~19 chords.
+  IMPORTANT: If the user requests a specific duration, output ENOUGH chords to fill that duration.
+  Repeat or vary the progression as needed to reach the target number of chords.
   Each chord MUST be: <root><quality> where root is one of: C, D, E, F, G, A, B (with optional # or b)
   and quality is EXACTLY one of: M, m, 7, m7b5, sus2, sus4, m7, M7, dim, dim0
   Examples of VALID chords: Am, CM, Dm, E7, FM, GM, Bm, Am7, CM7, Dm7, G7, Adim, Em7b5
@@ -43,7 +48,10 @@ Rules:
 - tempo: "slow" -> 70, "moderate" -> 110, "fast" -> 150, "upbeat" -> 140
 - temperature: "creative"/"experimental" -> 0.95, normal -> 0.9, "structured" -> 0.5
 - time_signature: Default [4, 4]. "waltz" -> [3, 4], "6/8" -> [6, 8]
-- nb_tokens: "short" -> 512, default -> 1024, "long" -> 2048
+- nb_tokens: Controls output length. Duration mapping (approximate):
+  ~5 seconds -> 512, ~15 seconds -> 1024, ~30 seconds -> 2048, ~60 seconds -> 4096
+  If the user specifies a duration in seconds, pick the closest nb_tokens value.
+  "short" -> 512, default -> 1024, "long" -> 2048
 
 Mood-to-chord mappings:
 - "sad"/"melancholic" -> minor keys: "Am Dm Em Am"

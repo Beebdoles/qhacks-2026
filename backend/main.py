@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from music_service import MusicService, ensure_midi_bytes, convert_audio_to_midi, _create_output_midi_path
+from music_service import MusicService, ensure_midi_bytes, convert_audio_to_midi, autotune_audio, _create_output_midi_path
 
 load_dotenv()
 
@@ -92,6 +92,32 @@ async def convert_to_midi(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Conversion failed: {e}")
+
+
+# --- Auto-tune audio then convert to MIDI ---
+
+
+@app.post("/api/autotune")
+async def autotune_to_midi(
+    file: UploadFile = File(...),
+):
+    """Auto-tune an audio file (pitch-correct to nearest semitone) then convert to MIDI."""
+    try:
+        audio_bytes = await file.read()
+        midi_bytes = await asyncio.to_thread(
+            autotune_audio, audio_bytes, file.filename or "input.mp3"
+        )
+        output_path = _create_output_midi_path()
+        with open(output_path, "wb") as f:
+            f.write(midi_bytes)
+        return FileResponse(
+            output_path,
+            media_type="audio/midi",
+            filename="autotuned.mid",
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Auto-tune failed: {e}")
 
 
 # --- Feature 1: Generate from scratch ---
