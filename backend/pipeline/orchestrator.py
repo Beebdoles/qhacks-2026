@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import traceback
 
@@ -9,6 +10,8 @@ from pipeline.stage_intent import run_intent_stage
 from pipeline.stage_score_builder import run_score_builder_stage
 from pipeline.stage_instrument_mapper import run_instrument_mapper_stage
 from pipeline.stage_midi_merger import run_midi_merger_stage
+from intent.schema import ToolCall
+from tools.dispatch import dispatch_tool_call
 
 # In-memory job store
 jobs: dict[str, JobStatus] = {}
@@ -97,6 +100,36 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         run_midi_merger_stage(mapped_midis, output_path)
 
         job.midi_path = output_path
+        job.progress = 90
+        print(f"{tag} Stage 4 complete.")
+
+        # ── Stage 5: Tool Dispatch ────────────────────────────────
+        if action_log:
+            job.stage = "tool_dispatch"
+            job.progress = 92
+            print(f"{tag} Stage 5: Dispatching {len(action_log)} tool call(s)...")
+
+            for i, action in enumerate(action_log):
+                tc = ToolCall(**action)
+                try:
+                    result = dispatch_tool_call(tc, job_dir)
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: {result}")
+                except NotImplementedError:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: skipped (not implemented)")
+                except Exception as exc:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: failed ({exc})")
+
+            print(f"{tag} Stage 5 complete.")
+
+        # ── Copy final output to midi-outputs/ ─────────────────────
+        midi_outputs_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "midi-outputs"
+        )
+        os.makedirs(midi_outputs_dir, exist_ok=True)
+        persistent_path = os.path.join(midi_outputs_dir, f"{job_id}.mid")
+        shutil.copy2(output_path, persistent_path)
+        print(f"{tag} Saved to {persistent_path}")
+
         job.progress = 100
         job.stage = "complete"
         job.status = "complete"
