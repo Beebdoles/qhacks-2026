@@ -1,1 +1,0 @@
-{"tempo_bpm":120,"time_signature":[4,4],"tonality":{"degree":1,"quality":"M"},"singing_instrument":"flute","segments":[{"start":0.0,"end":0.859,"type":"silence","chords":[]},{"start":0.859,"end":0.998,"type":"humming","chords":[{"degree":1,"duration_beats":0.25,"instruments":{"flute":[{"s":0,"octave":0,"duration":"s"}]}}]},{"start":0.998,"end":1.0,"type":"silence","chords":[]}]}
