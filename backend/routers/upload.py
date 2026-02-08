@@ -69,6 +69,43 @@ async def get_job_status(job_id: str):
     return job
 
 
+@router.post("/jobs/{job_id}/instructions")
+async def upload_instructions(job_id: str, file: UploadFile):
+    """Save an instruction audio file to the job directory."""
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    # Find job directory from existing midi_path or reconstruct it
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    job_dir = os.path.join(os.path.dirname(backend_dir), "jobs", job_id)
+    if not os.path.isdir(job_dir):
+        raise HTTPException(status_code=404, detail="Job directory not found")
+
+    # Increment filename: instructions_1.mp3, instructions_2.mp3, ...
+    n = 1
+    while os.path.exists(os.path.join(job_dir, f"instructions_{n}{ext}")):
+        n += 1
+    filename = f"instructions_{n}{ext}"
+    path = os.path.join(job_dir, filename)
+    with open(path, "wb") as f:
+        f.write(content)
+
+    print(f"[upload] Saved instruction audio: {path} ({len(content)} bytes)")
+    return {"status": "ok", "filename": filename}
+
+
 @router.get("/jobs/{job_id}/midi")
 async def get_midi(job_id: str):
     job = jobs.get(job_id)

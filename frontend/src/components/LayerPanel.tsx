@@ -3,6 +3,7 @@
 import { useEditorStore } from "@/stores/editorStore";
 import LayerItem from "./LayerItem";
 import VoiceInputCard from "./VoiceInputCard";
+import InstructionsCard from "./InstructionsCard";
 
 export default function LayerPanel() {
   const tracks = useEditorStore((s) => s.tracks);
@@ -39,6 +40,9 @@ export default function LayerPanel() {
       {(phase === "empty" || phase === "recording" || phase === "review") && (
         <VoiceInputCard />
       )}
+
+      {/* Instructions card — show in editor phase */}
+      {phase === "editor" && <InstructionsCard />}
     </div>
   );
 }
