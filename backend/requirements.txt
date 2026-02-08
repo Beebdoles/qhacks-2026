@@ -7,3 +7,5 @@ python-dotenv
 musiclang
 numpy<2.0
 mido
+elevenlabs
+pydub

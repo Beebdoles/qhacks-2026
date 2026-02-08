@@ -4,6 +4,7 @@ import traceback
 
 from models import JobStatus
 from pipeline.stage_gemini import run_gemini_stage
+from pipeline.stage_transcribe import run_transcribe_stage
 from pipeline.stage_score_builder import run_score_builder_stage
 from pipeline.stage_instrument_mapper import run_instrument_mapper_stage
 from pipeline.stage_midi_merger import run_midi_merger_stage
@@ -41,6 +42,17 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         job.segments = analysis.segments
         job.progress = 40
         print(f"{tag} Stage 1 complete. {len(analysis.segments)} segments.")
+
+        # ── Stage 1.5: Speech Transcription ───────────────────────
+        job.stage = "speech_transcription"
+        job.progress = 42
+        print(f"{tag} Stage 1.5: Transcribing speech segments...")
+
+        instruction_doc = run_transcribe_stage(analysis, upload_path, job_id)
+
+        job.instruction_doc = instruction_doc
+        job.progress = 50
+        print(f"{tag} Stage 1.5 complete.")
 
         # ── Stage 2: Score Builder ──────────────────────────────────
         job.stage = "score_building"

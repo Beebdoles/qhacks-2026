@@ -55,6 +55,14 @@ class Segment(BaseModel):
         default_factory=list,
         description="Chord progressions for this segment.",
     )
+    transcription: str | None = Field(
+        default=None,
+        description="ElevenLabs STT transcription for speech segments.",
+    )
+    audio_clip_path: str | None = Field(
+        default=None,
+        description="Path to the sliced audio clip for this segment.",
+    )
 
 
 class GeminiAnalysis(BaseModel):
@@ -75,4 +83,5 @@ class JobStatus(BaseModel):
     stage: str = ""
     segments: list[Segment] = []
     midi_path: str | None = None
+    instruction_doc: str | None = None
     error: str | None = None
