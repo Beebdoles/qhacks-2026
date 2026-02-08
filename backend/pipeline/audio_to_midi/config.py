@@ -17,6 +17,7 @@ MIN_VOICED_DURATION = 0.03  # seconds
 PITCH_CHANGE_THRESHOLD = 80  # cents
 MIN_NOTE_DURATION = 0.08  # seconds
 CONFIDENCE_DIP_THRESHOLD = 0.3
+MAX_MERGE_GAP = 0.1  # seconds -- merge consecutive same-pitch notes with gaps smaller than this
 
 # ── Quantization ──────────────────────────────────────────────────────
 GRID_SUBDIVISIONS = 4  # 16th notes

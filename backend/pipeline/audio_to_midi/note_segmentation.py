@@ -6,8 +6,9 @@ from .config import (
     PITCH_CHANGE_THRESHOLD,
     MIN_NOTE_DURATION,
     CONFIDENCE_DIP_THRESHOLD,
+    MAX_MERGE_GAP,
 )
-from .utils import hz_to_cents
+from .utils import hz_to_cents, hz_to_midi
 
 
 @dataclass
@@ -91,7 +92,40 @@ def segment_notes(
                 avg_confidence=mean_conf,
             ))
 
+    notes = _merge_same_pitch_notes(notes, onset_times)
     return notes
+
+
+def _merge_same_pitch_notes(
+    notes: list[RawNote], onset_times: np.ndarray
+) -> list[RawNote]:
+    """Merge consecutive notes that share the same MIDI pitch and have a small gap with no onset."""
+    if len(notes) <= 1:
+        return notes
+
+    merged: list[RawNote] = [notes[0]]
+    for note in notes[1:]:
+        prev = merged[-1]
+        gap = note.start - prev.end
+        same_pitch = round(hz_to_midi(prev.pitch_hz)) == round(hz_to_midi(note.pitch_hz))
+        small_gap = gap < MAX_MERGE_GAP
+        onset_in_gap = any((prev.end <= t <= note.start) for t in onset_times) if small_gap else False
+
+        if same_pitch and small_gap and not onset_in_gap:
+            # Merge: extend prev, use duration-weighted average confidence
+            prev_dur = prev.end - prev.start
+            note_dur = note.end - note.start
+            total_dur = prev_dur + note_dur
+            merged[-1] = RawNote(
+                pitch_hz=prev.pitch_hz,
+                start=prev.start,
+                end=note.end,
+                avg_confidence=(prev.avg_confidence * prev_dur + note.avg_confidence * note_dur) / total_dur,
+            )
+        else:
+            merged.append(note)
+
+    return merged
 
 
 def _find_spans(mask: np.ndarray) -> list[tuple[int, int]]:
