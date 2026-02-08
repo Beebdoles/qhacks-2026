@@ -3,7 +3,7 @@ import type { NoteEvent, TrackState } from "@/types/editor";
 import { TRACK_COLORS, GM_INSTRUMENTS } from "@/lib/constants";
 
 export async function fetchMidiAsArrayBuffer(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch MIDI: ${res.status}`);
   return res.arrayBuffer();
 }

@@ -9,6 +9,7 @@ from intent.schema import ToolCall, ToolName
 from tools.pitch_shift import run_pitch_shift
 from tools.progression_change import run_progression_change
 from tools.switch_instrument import run_switch_instrument
+from tools.repeat_track import run_repeat_track
 
 
 # Default location for user's saved tracks
@@ -118,11 +119,13 @@ def dispatch_tool_call(tool_call: ToolCall, job_dir: str) -> str:
 
         return result
 
+    if tool_call.tool == ToolName.repeat_track:
+        midi_path = resolve_midi_path(tool_call, job_dir)
+        print(f"{tag} repeat_track → {midi_path}")
+        return run_repeat_track(tool_call, midi_path)
+
     # TODO: wire up remaining tools
     # if tool_call.tool == ToolName.mp3_to_midi:
     #     return run_mp3_to_midi(tool_call, job_dir)
-    # if tool_call.tool == ToolName.repeat_track:
-    #     midi_path = resolve_midi_path(tool_call, job_dir)
-    #     return run_repeat_track(tool_call, midi_path)
 
     raise NotImplementedError(f"Tool {tool_call.tool!r} is not yet implemented.")
