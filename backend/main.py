@@ -101,12 +101,17 @@ async def convert_to_midi(
 async def autotune_to_midi(
     file: UploadFile = File(...),
     smooth: bool = Form(True),
+    min_note_duration: float = Form(0.15),
+    merge_gap: float = Form(0.05),
+    quantize_bpm: Optional[float] = Form(None),
+    quantize_grid: str = Form("sixteenth"),
 ):
-    """Convert audio to MIDI, optionally with smoothing (enabled by default)."""
+    """Convert audio to MIDI with aggressive anti-jitter smoothing."""
     try:
         audio_bytes = await file.read()
         midi_bytes = await asyncio.to_thread(
-            autotune_audio, audio_bytes, file.filename or "input.mp3", smooth
+            autotune_audio, audio_bytes, file.filename or "input.mp3",
+            smooth, min_note_duration, merge_gap, quantize_bpm, quantize_grid,
         )
         output_path = _create_output_midi_path()
         with open(output_path, "wb") as f:

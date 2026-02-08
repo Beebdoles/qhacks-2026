@@ -54,36 +54,58 @@ def cleanup(path: str):
 
 
 def _smooth_midi(midi_data: pretty_midi.PrettyMIDI,
-                  min_note_duration: float = 0.1,
-                  merge_gap: float = 0.05) -> pretty_midi.PrettyMIDI:
-    """Clean up MIDI by removing short artifacts and merging nearby same-pitch notes.
+                  min_note_duration: float = 0.15,
+                  merge_gap: float = 0.05,
+                  quantize_bpm: float = None,
+                  quantize_grid: str = "sixteenth") -> pretty_midi.PrettyMIDI:
+    """Aggressive anti-jitter MIDI cleanup for humming/vocal transcription.
 
-    1. Remove notes shorter than min_note_duration (artifact blips).
-    2. Snap half-step outliers: if a short note is between two longer notes of the
-       same pitch, replace it with that pitch.
-    3. Merge consecutive notes of the same pitch separated by a small gap.
+    Pipeline:
+    1. Majority voting: snap short notes to the pitch of their stable neighbors.
+       Looks past immediate neighbors to find "anchor" notes (duration >= threshold).
+    2. Remove notes shorter than min_note_duration.
+    3. Merge consecutive same-pitch notes separated by small gaps.
+    4. Second cull: remove anything that became too short after merging.
+    5. Optional rhythm quantization to a beat grid.
     """
+    short_threshold = min_note_duration * 2  # notes under this are snap candidates
+
     for instrument in midi_data.instruments:
         if not instrument.notes:
             continue
 
-        # Sort by start time
         instrument.notes.sort(key=lambda n: n.start)
-
-        # --- Pass 1: Snap half-step outlier notes ---
-        # A short note that's 1 semitone off from both its neighbors (which share
-        # the same pitch) is almost certainly a detection artifact.
         notes = instrument.notes
-        for i in range(1, len(notes) - 1):
-            prev_note = notes[i - 1]
-            curr_note = notes[i]
-            next_note = notes[i + 1]
 
-            curr_dur = curr_note.end - curr_note.start
-            if (curr_dur < min_note_duration * 2
-                    and prev_note.pitch == next_note.pitch
-                    and abs(curr_note.pitch - prev_note.pitch) == 1):
-                curr_note.pitch = prev_note.pitch
+        # --- Pass 1: Aggressive majority voting ---
+        # For each short note, find the nearest stable (long) neighbors on each
+        # side and snap if they agree on pitch and the current note is within
+        # 2 semitones. Also snaps to a single stable neighbor if only one exists.
+        for i in range(len(notes)):
+            curr = notes[i]
+            if (curr.end - curr.start) >= short_threshold:
+                continue
+
+            prev_pitch = None
+            next_pitch = None
+
+            for j in range(i - 1, -1, -1):
+                if (notes[j].end - notes[j].start) >= min_note_duration:
+                    prev_pitch = notes[j].pitch
+                    break
+
+            for j in range(i + 1, len(notes)):
+                if (notes[j].end - notes[j].start) >= min_note_duration:
+                    next_pitch = notes[j].pitch
+                    break
+
+            if prev_pitch is not None and next_pitch is not None:
+                if prev_pitch == next_pitch and abs(curr.pitch - prev_pitch) <= 2:
+                    curr.pitch = prev_pitch
+            elif prev_pitch is not None and abs(curr.pitch - prev_pitch) <= 1:
+                curr.pitch = prev_pitch
+            elif next_pitch is not None and abs(curr.pitch - next_pitch) <= 1:
+                curr.pitch = next_pitch
 
         # --- Pass 2: Remove very short notes ---
         notes = [n for n in notes if (n.end - n.start) >= min_note_duration]
@@ -95,7 +117,36 @@ def _smooth_midi(midi_data: pretty_midi.PrettyMIDI,
                 prev = merged[-1]
                 if (note.pitch == prev.pitch
                         and note.start - prev.end <= merge_gap):
-                    # Extend the previous note
+                    prev.end = max(prev.end, note.end)
+                    prev.velocity = max(prev.velocity, note.velocity)
+                else:
+                    merged.append(note)
+            notes = merged
+
+        # --- Pass 4: Second cull after merging ---
+        notes = [n for n in notes if (n.end - n.start) >= min_note_duration]
+
+        # --- Pass 5: Optional rhythm quantization ---
+        if quantize_bpm and notes:
+            beat_dur = 60.0 / quantize_bpm
+            grid = {
+                "sixteenth": beat_dur / 4,
+                "eighth": beat_dur / 2,
+                "quarter": beat_dur,
+            }.get(quantize_grid, beat_dur / 4)
+
+            for note in notes:
+                note.start = round(note.start / grid) * grid
+                note.end = round(note.end / grid) * grid
+                if note.end - note.start < grid:
+                    note.end = note.start + grid
+
+            # Re-merge after quantization (may create overlaps)
+            notes.sort(key=lambda n: n.start)
+            merged = [notes[0]]
+            for note in notes[1:]:
+                prev = merged[-1]
+                if note.pitch == prev.pitch and note.start <= prev.end:
                     prev.end = max(prev.end, note.end)
                     prev.velocity = max(prev.velocity, note.velocity)
                 else:
@@ -125,8 +176,11 @@ def convert_audio_to_midi(audio_bytes: bytes, filename: str) -> bytes:
         cleanup(tmp_audio.name)
 
 
-def autotune_audio(audio_bytes: bytes, filename: str, smooth: bool = True) -> bytes:
-    """Convert audio to MIDI, optionally with smoothing."""
+def autotune_audio(audio_bytes: bytes, filename: str, smooth: bool = True,
+                    min_note_duration: float = 0.15, merge_gap: float = 0.05,
+                    quantize_bpm: float = None,
+                    quantize_grid: str = "sixteenth") -> bytes:
+    """Convert audio to MIDI, optionally with aggressive anti-jitter smoothing."""
     suffix = Path(filename).suffix.lower() if filename else ".mp3"
     tmp_audio = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     tmp_audio.write(audio_bytes)
@@ -140,7 +194,13 @@ def autotune_audio(audio_bytes: bytes, filename: str, smooth: bool = True) -> by
 
         # 2. Optionally smooth MIDI
         if smooth:
-            midi_data = _smooth_midi(midi_data)
+            midi_data = _smooth_midi(
+                midi_data,
+                min_note_duration=min_note_duration,
+                merge_gap=merge_gap,
+                quantize_bpm=quantize_bpm,
+                quantize_grid=quantize_grid,
+            )
 
         midi_output = _create_output_midi_path()
         midi_data.write(midi_output)
