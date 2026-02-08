@@ -10,7 +10,7 @@ to interpret the user's spoken instructions and produce a list of tool calls.
 - params.instrument: The instrument to use (e.g. "piano", "guitar", "flute", "drums").
 
 **switch_instrument** — Change the instrument of a previously created track.
-- params.instrument: The new instrument name.
+- params.instrument: The new instrument name (e.g. "guitar", "piano", "kick", "snare", "hi_hat").
 - params.target_description: Which track to change (e.g. "the piano track", "the first track").
 
 **pitch_shift** — Transpose a track up or down.
@@ -126,6 +126,16 @@ Segments: (no musical segments)
 Output:
 {"tool_calls": [{"tool": "pitch_shift", "instruction": "Shift the piano track up by 12 semitones", \
 "audio_segment": null, "params": {"semitones": 12, "target_description": "the piano track"}}]}
+
+### Example 8: Switch to specific drum sound
+Timeline:
+[0.0s - 4.0s | SPEECH]: "Change the drums track to a kick drum"
+
+Segments: (no musical segments)
+
+Output:
+{"tool_calls": [{"tool": "switch_instrument", "instruction": "Change the drums track to kick drum", \
+"audio_segment": null, "params": {"instrument": "kick", "target_description": "the drums track"}}]}
 """
 
 

@@ -85,6 +85,36 @@ INSTRUMENT_PROGRAMS: dict[str, int] = {
     "drums_0": -1,
     "drum": -1,
     "percussion": -1,
+    # Drum-specific sounds (channel 9, notes remapped via DRUM_NOTE_MAP)
+    "kick": -1,
+    "kick_drum": -1,
+    "bass_drum": -1,
+    "snare": -1,
+    "snare_drum": -1,
+    "hi_hat": -1,
+    "closed_hi_hat": -1,
+    "open_hi_hat": -1,
+    "crash": -1,
+    "ride": -1,
+    "floor_tom": -1,
+    "high_tom": -1,
+}
+
+# Drum instrument name → GM percussion note number.
+# When switching to one of these, all notes are remapped to the target pitch.
+DRUM_NOTE_MAP: dict[str, int] = {
+    "kick": 36,
+    "kick_drum": 36,
+    "bass_drum": 36,
+    "snare": 38,
+    "snare_drum": 38,
+    "hi_hat": 42,
+    "closed_hi_hat": 42,
+    "open_hi_hat": 46,
+    "crash": 49,
+    "ride": 51,
+    "floor_tom": 41,
+    "high_tom": 48,
 }
 
 
@@ -169,6 +199,11 @@ def run_switch_instrument(tool_call: ToolCall, midi_path: str) -> str:
         if is_drum:
             inst.is_drum = True
             inst.name = instrument
+            # Specific drum type → remap all notes to that GM percussion note
+            drum_note = DRUM_NOTE_MAP.get(instrument.strip().lower())
+            if drum_note is not None:
+                for note in inst.notes:
+                    note.pitch = drum_note
         else:
             inst.is_drum = False
             inst.program = program
@@ -186,12 +221,14 @@ def run_switch_instrument(tool_call: ToolCall, midi_path: str) -> str:
             os.remove(tmp_path)
         raise
 
-    summary = (
-        f"Changed {len(matched)} track(s) to {instrument}"
-        f" (program {program})."
-        if not is_drum
-        else f"Changed {len(matched)} track(s) to drums."
-    )
+    if is_drum:
+        drum_note = DRUM_NOTE_MAP.get(instrument.strip().lower())
+        if drum_note is not None:
+            summary = f"Changed {len(matched)} track(s) to {instrument} (drum note {drum_note})."
+        else:
+            summary = f"Changed {len(matched)} track(s) to drums."
+    else:
+        summary = f"Changed {len(matched)} track(s) to {instrument} (program {program})."
 
     print(f"{tag} {summary}")
     return summary

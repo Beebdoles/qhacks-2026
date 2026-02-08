@@ -16,8 +16,9 @@ async function loadDeps() {
 }
 
 interface TrackChannel {
-  instrument: any; // soundfont-player instrument
+  instrument: any; // soundfont-player instrument or drum kit wrapper
   gainNode: GainNode;
+  dispose?: () => void;
 }
 
 class AudioEngine {
@@ -48,26 +49,151 @@ class AudioEngine {
       const gainNode = ctx.createGain();
       gainNode.connect(ctx.destination);
 
-      const sfName = track.channel === 9
-        ? "percussion" as any
-        : undefined; // default = acoustic_grand_piano mapped by program
-
-      try {
-        const instrument = await Soundfont.instrument(ctx, sfName ?? this.programToSoundfontName(track.programNumber), {
-          gain: 1,
-          destination: gainNode,
-        });
-        this.trackChannels.set(track.index, { instrument, gainNode });
-      } catch (e) {
-        console.warn(`Failed to load instrument for track ${track.index}:`, e);
-        // Fallback to acoustic_grand_piano
-        const instrument = await Soundfont.instrument(ctx, "acoustic_grand_piano" as any, {
-          gain: 1,
-          destination: gainNode,
-        });
-        this.trackChannels.set(track.index, { instrument, gainNode });
+      if (track.channel === 9) {
+        // Synthesised drum kit with distinct sounds per GM note
+        const { instrument, dispose } = this.createDrumKit(gainNode);
+        this.trackChannels.set(track.index, { instrument, gainNode, dispose });
+      } else {
+        try {
+          const instrument = await Soundfont.instrument(ctx, this.programToSoundfontName(track.programNumber), {
+            gain: 1,
+            destination: gainNode,
+          });
+          this.trackChannels.set(track.index, { instrument, gainNode });
+        } catch (e) {
+          console.warn(`Failed to load instrument for track ${track.index}:`, e);
+          const instrument = await Soundfont.instrument(ctx, "acoustic_grand_piano" as any, {
+            gain: 1,
+            destination: gainNode,
+          });
+          this.trackChannels.set(track.index, { instrument, gainNode });
+        }
       }
     }
+  }
+
+  private createDrumKit(gainNode: GainNode): { instrument: any; dispose: () => void } {
+    if (!Tone) throw new Error("Tone not loaded");
+
+    // --- KICK: deep sine thump ---
+    const kick = new Tone.MembraneSynth({
+      pitchDecay: 0.05,
+      octaves: 8,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.4 },
+    });
+    kick.connect(gainNode);
+
+    // --- SNARE: mid-range noise burst + body ---
+    const snareBody = new Tone.MembraneSynth({
+      pitchDecay: 0.01,
+      octaves: 4,
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+    });
+    snareBody.connect(gainNode);
+    snareBody.volume.value = -8;
+
+    const snareNoise = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.13, sustain: 0, release: 0.1 },
+    });
+    const snareBPF = new Tone.Filter(3000, "bandpass");
+    snareNoise.connect(snareBPF);
+    snareBPF.connect(gainNode);
+
+    // --- HI-HAT: bright high-pass filtered noise ---
+    const hihatNoise = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.04, sustain: 0, release: 0.02 },
+    });
+    const hihatHPF = new Tone.Filter(9000, "highpass");
+    hihatNoise.connect(hihatHPF);
+    hihatHPF.connect(gainNode);
+
+    // --- OPEN HI-HAT: same but longer ---
+    const openHatNoise = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.15 },
+    });
+    const openHatHPF = new Tone.Filter(8000, "highpass");
+    openHatNoise.connect(openHatHPF);
+    openHatHPF.connect(gainNode);
+
+    // --- CYMBAL: long bright shimmer ---
+    const cymbalNoise = new Tone.NoiseSynth({
+      noise: { type: "white" },
+      envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.5 },
+    });
+    const cymbalHPF = new Tone.Filter(6000, "highpass");
+    cymbalNoise.connect(cymbalHPF);
+    cymbalHPF.connect(gainNode);
+
+    // --- TOM: pitched membrane ---
+    const tom = new Tone.MembraneSynth({
+      pitchDecay: 0.06,
+      octaves: 4,
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.2 },
+    });
+    tom.connect(gainNode);
+
+    const instrument = {
+      play(noteName: string, time: number, opts: { duration: number; gain: number }) {
+        const midi = Tone!.Frequency(noteName).toMidi();
+        const vel = Math.min(1, opts.gain ?? 0.8);
+
+        if (midi === 35 || midi === 36) {
+          // Bass drum — deep thump
+          kick.triggerAttackRelease("C1", 0.5, time, vel);
+        } else if (midi === 37) {
+          // Side stick — short quiet body hit
+          snareBody.triggerAttackRelease("E3", 0.05, time, vel * 0.6);
+        } else if (midi === 38 || midi === 40) {
+          // Snare — noise + body layered
+          snareNoise.triggerAttackRelease(0.12, time);
+          snareBody.triggerAttackRelease("C3", 0.08, time, vel);
+        } else if (midi === 39) {
+          // Hand clap — short noise burst
+          snareNoise.triggerAttackRelease(0.06, time);
+        } else if (midi === 42 || midi === 44) {
+          // Closed hi-hat — very short bright noise
+          hihatNoise.triggerAttackRelease(0.04, time);
+        } else if (midi === 46) {
+          // Open hi-hat — longer bright noise
+          openHatNoise.triggerAttackRelease(0.25, time);
+        } else if (midi === 49 || midi === 52 || midi === 55 || midi === 57) {
+          // Crash cymbals — long shimmer
+          cymbalNoise.triggerAttackRelease(0.7, time);
+        } else if (midi === 51 || midi === 53 || midi === 59) {
+          // Ride cymbal — medium bright
+          openHatNoise.triggerAttackRelease(0.4, time);
+        } else if (midi >= 41 && midi <= 50) {
+          // Toms — pitched from low to high
+          const freq = 60 + (midi - 41) * 20;
+          tom.triggerAttackRelease(freq, 0.2, time, vel);
+        } else {
+          // Fallback: short hi-hat tick
+          hihatNoise.triggerAttackRelease(0.03, time);
+        }
+      },
+    };
+
+    const dispose = () => {
+      kick.dispose();
+      snareBody.dispose();
+      snareNoise.dispose();
+      snareBPF.dispose();
+      hihatNoise.dispose();
+      hihatHPF.dispose();
+      openHatNoise.dispose();
+      openHatHPF.dispose();
+      cymbalNoise.dispose();
+      cymbalHPF.dispose();
+      tom.dispose();
+    };
+
+    return { instrument, dispose };
   }
 
   private programToSoundfontName(program: number): string {
@@ -231,6 +357,7 @@ class AudioEngine {
 
   private disposeChannels(): void {
     for (const [, channel] of this.trackChannels) {
+      if (channel.dispose) channel.dispose();
       channel.gainNode.disconnect();
     }
     this.trackChannels.clear();

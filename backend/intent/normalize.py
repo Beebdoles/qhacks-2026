@@ -15,6 +15,15 @@ INSTRUMENT_ALIASES: dict[str, str] = {
     "organ": "drawbar_organ",
     "electric_bass": "electric_bass_finger",
     "synth": "synth_bass_1",
+    # Drum-specific aliases
+    "kick_drum": "kick",
+    "bass_drum": "kick",
+    "snare_drum": "snare",
+    "hi-hat": "hi_hat",
+    "hihat": "hi_hat",
+    "high_hat": "hi_hat",
+    "crash_cymbal": "crash",
+    "ride_cymbal": "ride",
 }
 
 
