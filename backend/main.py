@@ -1,13 +1,30 @@
+import asyncio
 import os
 import time
+import traceback
+from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from routers.upload import router as upload_router, _executor
+from music_service import MusicService, ensure_midi_bytes, convert_audio_to_midi, autotune_audio, _create_output_midi_path
+
+
+class GenerateRequest(BaseModel):
+    prompt: Optional[str] = None
+    chord_progression: Optional[str] = None
+    nb_tokens: int = 1024
+    temperature: float = 0.9
+    topp: float = 1.0
+    rng_seed: int = 0
+    tempo: int = 120
+    time_signature: tuple[int, int] = (4, 4)
 
 app = FastAPI()
 
@@ -36,6 +53,8 @@ app.include_router(upload_router)
 @app.on_event("startup")
 def startup():
     os.makedirs("/tmp/audio_midi_jobs", exist_ok=True)
+    app.state.music_service = MusicService()
+    app.state.predict_lock = asyncio.Lock()
     print("[startup] Server ready to accept requests")
 
 

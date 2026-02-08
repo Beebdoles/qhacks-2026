@@ -2,10 +2,20 @@ fastapi
 uvicorn
 python-multipart
 pydantic
-google-genai
 python-dotenv
+google-genai
 musiclang
-numpy<2.0
+musiclang-predict
+music21
+# basic-pitch — install manually: pip install basic-pitch --no-deps (requires TF < 2.15 but works at runtime with 2.20)
+openai-whisper
+pretty_midi
 mido
+numpy<2.0
+torch
+torchcrepe
+librosa
+soundfile
+scipy
 elevenlabs
 pydub
