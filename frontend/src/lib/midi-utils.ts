@@ -5,7 +5,13 @@ import { TRACK_COLORS, GM_INSTRUMENTS } from "@/lib/constants";
 export async function fetchMidiAsArrayBuffer(url: string): Promise<ArrayBuffer> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch MIDI: ${res.status}`);
-  return res.arrayBuffer();
+  const buf = await res.arrayBuffer();
+  // Validate MIDI magic bytes (MThd)
+  const header = new Uint8Array(buf, 0, 4);
+  if (String.fromCharCode(...header) !== "MThd") {
+    throw new Error("Response is not a valid MIDI file");
+  }
+  return buf;
 }
 
 export function parseMidiToTracks(arrayBuffer: ArrayBuffer): {
@@ -14,7 +20,7 @@ export function parseMidiToTracks(arrayBuffer: ArrayBuffer): {
   bpm: number;
   timeSignature: [number, number];
 } {
-  const midi = new Midi(arrayBuffer);
+  const midi = new Midi(new Uint8Array(arrayBuffer) as unknown as ArrayBuffer);
 
   const bpm = midi.header.tempos.length > 0 ? Math.round(midi.header.tempos[0].bpm) : 120;
   const ts = midi.header.timeSignatures.length > 0

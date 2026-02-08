@@ -8,11 +8,14 @@ export function setStoreGetter(fn: () => { tracks: TrackState[] }) {
 
 // Lazy-loaded Tone.js (avoid SSR)
 let Tone: typeof import("tone") | null = null;
-let Soundfont: typeof import("soundfont-player") | null = null;
+let Soundfont: typeof import("soundfont-player").default | null = null;
 
 async function loadDeps() {
   if (!Tone) Tone = await import("tone");
-  if (!Soundfont) Soundfont = await import("soundfont-player");
+  if (!Soundfont) {
+    const mod = await import("soundfont-player");
+    Soundfont = mod.default ?? mod;
+  }
 }
 
 interface TrackChannel {
@@ -49,18 +52,17 @@ class AudioEngine {
       gainNode.connect(ctx.destination);
 
       const sfName = track.channel === 9
-        ? "percussion" as any
-        : undefined; // default = acoustic_grand_piano mapped by program
+        ? "synth_drum" as any
+        : this.programToSoundfontName(track.programNumber);
 
       try {
-        const instrument = await Soundfont.instrument(ctx, sfName ?? this.programToSoundfontName(track.programNumber), {
+        const instrument = await Soundfont.instrument(ctx, sfName, {
           gain: 1,
           destination: gainNode,
         });
         this.trackChannels.set(track.index, { instrument, gainNode });
       } catch (e) {
         console.warn(`Failed to load instrument for track ${track.index}:`, e);
-        // Fallback to acoustic_grand_piano
         const instrument = await Soundfont.instrument(ctx, "acoustic_grand_piano" as any, {
           gain: 1,
           destination: gainNode,
