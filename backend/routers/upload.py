@@ -43,7 +43,8 @@ async def upload_audio(file: UploadFile):
 
     # Create job directory and save file
     job_id = str(uuid.uuid4())
-    job_dir = os.path.join("/tmp", "audio_midi_jobs", job_id)
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    job_dir = os.path.join(os.path.dirname(backend_dir), "jobs", job_id)
     os.makedirs(job_dir, exist_ok=True)
 
     input_path = os.path.join(job_dir, f"input{ext}")

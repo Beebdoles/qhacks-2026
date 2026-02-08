@@ -1,5 +1,9 @@
+from __future__ import annotations
+
+import json
 import os
 
+import mido
 from musiclang.write.score import Score
 from musiclang.write.library import (
     s0, s1, s2, s3, s4, s5, s6,
@@ -7,7 +11,7 @@ from musiclang.write.library import (
     r,
 )
 
-from models import GeminiAnalysis, NoteData, ChordData, Tonality
+from models import GeminiAnalysis, NoteData, NoteEvent, ChordData, Tonality, Segment
 
 # ── MusicLang lookup tables ──────────────────────────────────────────
 
@@ -72,13 +76,72 @@ def build_tonality(tonality: Tonality):
     return getattr(base, quality)
 
 
+# ── Direct MIDI from BasicPitch notes ─────────────────────────────────
+
+MELODY_TYPES = {"singing", "humming"}
+
+
+def _notes_in_range(
+    notes: list[NoteEvent], start: float, end: float
+) -> list[NoteEvent]:
+    """Filter notes whose onset falls within [start, end)."""
+    return [n for n in notes if start <= n.start < end]
+
+
+def _build_midi_from_notes(
+    notes: list[NoteEvent], tempo: int, time_sig: tuple[int, int], output_path: str
+) -> None:
+    """Build a MIDI file directly from BasicPitch NoteEvent list."""
+    ticks_per_beat = 480
+    mid = mido.MidiFile(type=0, ticks_per_beat=ticks_per_beat)
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+
+    # Tempo + time signature meta
+    us_per_beat = int(60_000_000 / tempo)
+    track.append(mido.MetaMessage("set_tempo", tempo=us_per_beat, time=0))
+    track.append(mido.MetaMessage(
+        "time_signature",
+        numerator=time_sig[0], denominator=time_sig[1],
+        clocks_per_click=24, notated_32nd_notes_per_beat=8, time=0,
+    ))
+
+    if not notes:
+        mid.save(output_path)
+        return
+
+    # Convert note events to MIDI messages sorted by absolute time
+    events = []  # (abs_tick, type, pitch, velocity)
+    sec_per_tick = 60.0 / (tempo * ticks_per_beat)
+    for n in notes:
+        on_tick = int(n.start / sec_per_tick)
+        off_tick = int(n.end / sec_per_tick)
+        events.append((on_tick, "note_on", n.pitch, n.velocity))
+        events.append((off_tick, "note_off", n.pitch, 0))
+
+    events.sort(key=lambda e: (e[0], e[1] == "note_on"))  # offs before ons at same tick
+
+    prev_tick = 0
+    for abs_tick, msg_type, pitch, vel in events:
+        delta = max(0, abs_tick - prev_tick)
+        track.append(mido.Message(msg_type, note=pitch, velocity=vel, time=delta))
+        prev_tick = abs_tick
+
+    mid.save(output_path)
+
+
 # ── Stage entry point ────────────────────────────────────────────────
 
 
 def run_score_builder_stage(
-    analysis: GeminiAnalysis, job_dir: str
+    analysis: GeminiAnalysis,
+    job_dir: str,
+    extracted_notes: list[NoteEvent] | None = None,
 ) -> dict[str, str]:
     """Build MusicLang scores per segment type and export to MIDI.
+
+    For singing/humming: uses BasicPitch notes directly (accurate pitches).
+    For beatboxing: uses Gemini → MusicLang (pattern generation).
 
     Returns {seg_type: midi_path} mapping.
     """
@@ -91,27 +154,76 @@ def run_score_builder_stage(
 
     tonality_obj = build_tonality(analysis.tonality)
 
-    # Group chords by segment type (skip silence/speech)
-    chords_by_type: dict[str, list] = {}
+    if extracted_notes is None:
+        extracted_notes = []
+
+    # Collect segments by type
+    segments_by_type: dict[str, list[Segment]] = {}
     for segment in analysis.segments:
         seg_type = segment.type.value
         if seg_type in ("silence", "speech"):
             continue
-        for chord_data in segment.chords:
-            chords_by_type.setdefault(seg_type, []).append(
-                build_chord(chord_data, tonality_obj)
-            )
+        segments_by_type.setdefault(seg_type, []).append(segment)
 
-    # Build one Score per type and export to MIDI
     midi_paths: dict[str, str] = {}
-    for seg_type, chord_list in chords_by_type.items():
-        if not chord_list:
-            chord_list = [(I % tonality_obj)(piano=r.w)]
 
-        score = Score(chord_list, tempo=tempo, time_signature=time_sig)
+    for seg_type, segments in segments_by_type.items():
         midi_path = os.path.join(job_dir, f"{seg_type}.mid")
-        score.to_midi(midi_path)
+
+        if seg_type in MELODY_TYPES and extracted_notes:
+            # Use BasicPitch notes directly for singing/humming
+            relevant_notes = []
+            for seg in segments:
+                relevant_notes.extend(_notes_in_range(extracted_notes, seg.start, seg.end))
+
+            # Shift notes to start at time 0 so all tracks overlap
+            if relevant_notes:
+                earliest = min(n.start for n in relevant_notes)
+                relevant_notes = [
+                    NoteEvent(
+                        pitch=n.pitch,
+                        start=n.start - earliest,
+                        end=n.end - earliest,
+                        velocity=n.velocity,
+                    )
+                    for n in relevant_notes
+                ]
+
+            # Dump BasicPitch notes used for this segment type
+            with open(os.path.join(job_dir, f"debug_basicpitch_{seg_type}.json"), "w") as f:
+                json.dump([n.model_dump() for n in relevant_notes], f, indent=2)
+
+            _build_midi_from_notes(relevant_notes, tempo, time_sig, midi_path)
+            print(f"[score_builder] {seg_type} -> {midi_path} (BasicPitch: {len(relevant_notes)} notes)")
+        else:
+            # Use Gemini → MusicLang for beatboxing and fallback
+            # (MusicLang already starts at time 0)
+            chord_list = []
+            for seg in segments:
+                for chord_data in seg.chords:
+                    chord_list.append(build_chord(chord_data, tonality_obj))
+
+            # Dump chord data input for MusicLang
+            with open(os.path.join(job_dir, f"debug_musiclang_input_{seg_type}.json"), "w") as f:
+                chords_dump = []
+                for seg in segments:
+                    for cd in seg.chords:
+                        chords_dump.append(cd.model_dump())
+                json.dump({"tonality": analysis.tonality.model_dump(), "tempo": tempo,
+                           "time_sig": list(time_sig), "chords": chords_dump}, f, indent=2)
+
+            if not chord_list:
+                chord_list = [(I % tonality_obj)(piano=r.w)]
+
+            score = Score(chord_list, tempo=tempo, time_signature=time_sig)
+            # Dump MusicLang score to debug file
+            debug_path = os.path.join(job_dir, f"debug_musiclang_{seg_type}.txt")
+            with open(debug_path, "w") as f:
+                f.write(str(score))
+            print(f"[score_builder] Wrote debug file: debug_musiclang_{seg_type}.txt")
+            score.to_midi(midi_path)
+            print(f"[score_builder] {seg_type} -> {midi_path} (MusicLang)")
+
         midi_paths[seg_type] = midi_path
-        print(f"[score_builder] {seg_type} -> {midi_path}")
 
     return midi_paths

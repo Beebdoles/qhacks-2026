@@ -6,6 +6,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class NoteEvent(BaseModel):
+    pitch: int = Field(description="MIDI note number (0-127).")
+    start: float = Field(description="Start time in seconds.")
+    end: float = Field(description="End time in seconds.")
+    velocity: int = Field(ge=0, le=127, description="Note velocity (0-127).")
+
+
 class SegmentType(str, Enum):
     silence = "silence"
     speech = "speech"
