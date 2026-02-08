@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from models import JobStatus
-from pipeline.orchestrator import jobs, run_pipeline
+from pipeline.orchestrator import jobs, run_pipeline, run_edit_pipeline
 
 router = APIRouter(prefix="/api")
 
@@ -66,6 +66,49 @@ async def get_job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/jobs/{job_id}/edit")
+async def edit_job(job_id: str, file: UploadFile):
+    """Accept a voice command recording and run the lightweight edit pipeline."""
+    print(f"[edit] Received edit for job {job_id[:8]}: {file.filename}")
+
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "processing":
+        raise HTTPException(status_code=409, detail="Job is already processing")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. Allowed: MP3, WebM.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    # Save to existing job directory
+    job_dir = os.path.dirname(job.midi_path) if job.midi_path else os.path.join(
+        "/tmp", "audio_midi_jobs", job_id
+    )
+    edit_path = os.path.join(job_dir, f"edit_input{ext}")
+    with open(edit_path, "wb") as f:
+        f.write(content)
+
+    # Reset job for edit processing
+    job.progress = 0
+    job.stage = "speech_transcription"
+    job.error = None
+
+    _executor.submit(run_edit_pipeline, job_id, edit_path)
+
+    return {"job_id": job_id, "status": "processing"}
 
 
 @router.get("/jobs/{job_id}/midi")

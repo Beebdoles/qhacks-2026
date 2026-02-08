@@ -13,12 +13,14 @@ export interface JobData {
   stage: string;
   segments: Segment[];
   midi_path: string | null;
+  instruction_doc: string | null;
+  action_log: Record<string, unknown>[];
   error: string | null;
 }
 
 const API_BASE = "";
 
-export function useJobPolling(jobId: string | null) {
+export function useJobPolling(jobId: string | null, generation: number = 0) {
   const [data, setData] = useState<JobData | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -28,7 +30,7 @@ export function useJobPolling(jobId: string | null) {
       return;
     }
 
-    console.log(`[polling] Started polling for job ${jobId.slice(0, 8)}`);
+    console.log(`[polling] Started polling for job ${jobId.slice(0, 8)} (gen=${generation})`);
 
     const poll = async () => {
       try {
@@ -60,7 +62,7 @@ export function useJobPolling(jobId: string | null) {
         intervalRef.current = null;
       }
     };
-  }, [jobId]);
+  }, [jobId, generation]);
 
   return data;
 }

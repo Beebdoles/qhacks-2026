@@ -3,22 +3,49 @@
 import { useCallback, useEffect } from "react";
 import { useEditorStore } from "@/stores/editorStore";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
+import { useJobPolling } from "@/hooks/useJobPolling";
 import Toolbar from "@/components/Toolbar";
 import LayerPanel from "@/components/LayerPanel";
 import TimelineArea from "@/components/TimelineArea";
 import StatusBar from "@/components/StatusBar";
+import EditProgressToast from "@/components/EditProgressToast";
+import EditErrorModal from "@/components/EditErrorModal";
 import { audioEngine, setStoreGetter } from "@/lib/AudioEngine";
 import { fetchMidiAsArrayBuffer, parseMidiToTracks } from "@/lib/midi-utils";
 
 // Register store getter for AudioEngine (avoids circular import)
 setStoreGetter(() => useEditorStore.getState());
 
+async function reloadMidi(jobId: string) {
+  audioEngine.stop();
+  useEditorStore.getState().setPlaying(false);
+
+  const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi`);
+  const { tracks, duration, bpm, timeSignature } = parseMidiToTracks(arrayBuffer);
+
+  const store = useEditorStore.getState();
+  store.setTracks(tracks);
+  store.setBpm(bpm);
+  store.setTimeSignature(timeSignature);
+  store.setTotalDuration(duration);
+  store.setCurrentTime(0);
+
+  await audioEngine.loadTracks(tracks);
+}
+
 export default function Home() {
   const phase = useEditorStore((s) => s.phase);
   const jobId = useEditorStore((s) => s.jobId);
+  const isEditing = useEditorStore((s) => s.isEditing);
+  const editGeneration = useEditorStore((s) => s.editGeneration);
+  const errorMessage = useEditorStore((s) => s.errorMessage);
+  const setErrorMessage = useEditorStore((s) => s.setErrorMessage);
 
   // Drive playhead animation
   useAnimationFrame();
+
+  // Poll for edit pipeline progress (only when editing)
+  const editJob = useJobPolling(isEditing ? jobId : null, editGeneration);
 
   // When entering editor phase, fetch and load MIDI
   useEffect(() => {
@@ -49,6 +76,37 @@ export default function Home() {
     loadMidi();
     return () => { cancelled = true; };
   }, [phase, jobId]);
+
+  // Handle edit pipeline completion: reload MIDI when done
+  useEffect(() => {
+    if (!editJob || !isEditing) return;
+
+    // Update progress in store for the toast overlay
+    useEditorStore.getState().setJobProgress(editJob.progress, editJob.stage);
+
+    if (editJob.status === "complete") {
+      const hasActions = editJob.action_log && editJob.action_log.length > 0;
+
+      if (!hasActions) {
+        console.log("[edit] No tool calls produced — showing error modal");
+        useEditorStore.getState().setIsEditing(false);
+        setErrorMessage(
+          "No valid instructions were found in your recording. Try speaking more clearly, e.g. \"Shift the pitch up by 5 semitones.\""
+        );
+        return;
+      }
+
+      console.log("[edit] Edit pipeline complete, reloading MIDI...");
+      reloadMidi(editJob.id)
+        .then(() => console.log("[edit] MIDI reloaded successfully"))
+        .catch((err) => console.error("[edit] Failed to reload MIDI:", err))
+        .finally(() => useEditorStore.getState().setIsEditing(false));
+    } else if (editJob.status === "failed") {
+      console.error("[edit] Edit pipeline failed:", editJob.error);
+      useEditorStore.getState().setIsEditing(false);
+      setErrorMessage("Something went wrong while processing your command. Please try again.");
+    }
+  }, [editJob, isEditing, setErrorMessage]);
 
   // Sync mute toggles with audio engine GainNodes
   useEffect(() => {
@@ -118,16 +176,24 @@ export default function Home() {
       <Toolbar onPlay={handlePlay} onStop={handleStop} onExport={handleExport} />
 
       {/* Main area */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
         <LayerPanel />
 
         {/* Timeline */}
         <TimelineArea onSeek={handleSeek} />
+
+        {/* Edit progress toast */}
+        {isEditing && <EditProgressToast />}
       </div>
 
       {/* Status bar */}
       <StatusBar />
+
+      {/* Error modal — shared by both full pipeline and edit flow */}
+      {errorMessage && (
+        <EditErrorModal message={errorMessage} onClose={() => setErrorMessage(null)} />
+      )}
     </div>
   );
 }

@@ -9,16 +9,20 @@ type VoiceState = "ready" | "recording" | "review";
 export default function VoiceInputCard() {
   const [voiceState, setVoiceState] = useState<VoiceState>("ready");
   const [recordedDuration, setRecordedDuration] = useState(0);
+  const phase = useEditorStore((s) => s.phase);
   const setPhase = useEditorStore((s) => s.setPhase);
   const setJobId = useEditorStore((s) => s.setJobId);
   const setRecordedFile = useEditorStore((s) => s.setRecordedFile);
+  const isEditing = useEditorStore((s) => s.isEditing);
+
+  const isEditorMode = phase === "editor";
 
   const handleRecordingComplete = useCallback((file: File) => {
     setRecordedFile(file);
     setVoiceState("review");
   }, [setRecordedFile]);
 
-  const { recorderState, elapsedSeconds, error, startRecording, stopRecording } =
+  const { elapsedSeconds, error, startRecording, stopRecording } =
     useAudioRecorder(handleRecordingComplete);
 
   const handleStart = () => {
@@ -38,22 +42,42 @@ export default function VoiceInputCard() {
   };
 
   const handleUpload = async () => {
-    const file = useEditorStore.getState().recordedFile;
+    const store = useEditorStore.getState();
+    const file = store.recordedFile;
     if (!file) return;
-
-    setPhase("processing");
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const data = await res.json();
-      setJobId(data.job_id);
+      if (isEditorMode && store.jobId) {
+        // Edit flow: send voice command to existing job
+        store.setIsEditing(true);
+        store.bumpEditGeneration();
+        const res = await fetch(`/api/jobs/${store.jobId}/edit`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!res.ok) throw new Error("Edit upload failed");
+        // Stay in editor phase, polling will pick up progress
+        setVoiceState("ready");
+        setRecordedFile(null);
+        setRecordedDuration(0);
+      } else {
+        // Initial full pipeline flow
+        setPhase("processing");
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        setJobId(data.job_id);
+      }
     } catch (err) {
       console.error("Upload failed:", err);
-      setPhase("empty");
+      if (isEditorMode) {
+        store.setIsEditing(false);
+      } else {
+        setPhase("empty");
+      }
       setVoiceState("ready");
     }
   };
@@ -64,6 +88,8 @@ export default function VoiceInputCard() {
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
+  const startDisabled = isEditing;
+
   return (
     <div className="bg-surface-700 rounded-lg p-4 mx-3 mb-3">
       {voiceState === "ready" && (
@@ -73,13 +99,18 @@ export default function VoiceInputCard() {
               <path d="M8 1a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0v-4A2.5 2.5 0 0 0 8 1Z" fill="currentColor"/>
               <path d="M4 6.5a.5.5 0 0 0-1 0v1a5 5 0 0 0 4.5 4.975V14H6a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1H8.5v-1.525A5 5 0 0 0 13 7.5v-1a.5.5 0 0 0-1 0v1a4 4 0 0 1-8 0v-1Z" fill="currentColor"/>
             </svg>
-            <span className="text-sm font-medium text-text-primary">Voice Input</span>
+            <span className="text-sm font-medium text-text-primary">
+              {isEditorMode ? "Voice Command" : "Voice Input"}
+            </span>
           </div>
-          <p className="text-xs text-text-tertiary mb-3">Ready</p>
+          <p className="text-xs text-text-tertiary mb-3">
+            {isEditing ? "Processing command…" : isEditorMode ? "Record a command" : "Ready"}
+          </p>
           {error && <p className="text-xs text-recording mb-2">{error}</p>}
           <button
             onClick={handleStart}
-            className="w-full py-2 px-3 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-all duration-150 cursor-pointer"
+            disabled={startDisabled}
+            className="w-full py-2 px-3 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Start Recording
           </button>
@@ -145,7 +176,7 @@ export default function VoiceInputCard() {
               onClick={handleUpload}
               className="flex-1 py-2 px-3 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-all duration-150 cursor-pointer"
             >
-              Upload
+              {isEditorMode ? "Apply" : "Upload"}
             </button>
           </div>
         </>

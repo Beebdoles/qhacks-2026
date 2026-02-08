@@ -35,6 +35,16 @@ interface EditorState {
   // Recorded audio file (for upload)
   recordedFile: File | null;
   setRecordedFile: (f: File | null) => void;
+
+  // Edit mode (voice command in editor)
+  isEditing: boolean;
+  setIsEditing: (editing: boolean) => void;
+  editGeneration: number;
+  bumpEditGeneration: () => void;
+
+  // Error modal
+  errorMessage: string | null;
+  setErrorMessage: (msg: string | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -82,4 +92,12 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   recordedFile: null,
   setRecordedFile: (recordedFile) => set({ recordedFile }),
+
+  isEditing: false,
+  setIsEditing: (isEditing) => set({ isEditing }),
+  editGeneration: 0,
+  bumpEditGeneration: () => set((s) => ({ editGeneration: s.editGeneration + 1 })),
+
+  errorMessage: null,
+  setErrorMessage: (errorMessage) => set({ errorMessage }),
 }));

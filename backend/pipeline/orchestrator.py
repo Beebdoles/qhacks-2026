@@ -139,3 +139,95 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         job.status = "failed"
         job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
         print(f"{tag} FAILED: {type(e).__name__}: {e}")
+
+
+def run_edit_pipeline(job_id: str, audio_path: str) -> None:
+    """Lightweight edit pipeline: transcribe speech → parse intent → dispatch tools."""
+    job = jobs[job_id]
+    job.status = "processing"
+    job.progress = 0
+    job.error = None
+    job_dir = os.path.dirname(audio_path)
+    tag = f"[edit:{job_id[:8]}]"
+
+    try:
+        # ── Pre-processing: WebM → MP3 if needed ────────────────────
+        upload_path = audio_path
+        if audio_path.endswith(".webm"):
+            mp3_path = audio_path.rsplit(".", 1)[0] + ".mp3"
+            print(f"{tag} Converting WebM to MP3...")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", audio_path, mp3_path],
+                capture_output=True, check=True,
+            )
+            upload_path = mp3_path
+
+        # ── Stage 1: Transcribe full audio ────────────────────────────
+        job.stage = "speech_transcription"
+        job.progress = 10
+        print(f"{tag} Transcribing voice command...")
+
+        from elevenlabs.client import ElevenLabs as _EL
+        el_client = _EL(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        with open(upload_path, "rb") as f:
+            stt_result = el_client.speech_to_text.convert(model_id="scribe_v1", file=f)
+        transcription = stt_result.text.strip()
+
+        instruction_doc = f'[SPEECH]: "{transcription}"'
+        job.instruction_doc = instruction_doc
+        job.progress = 40
+        print(f"{tag} Transcription: \"{transcription}\"")
+
+        # ── Stage 2: Intent parsing ───────────────────────────────────
+        job.stage = "intent_parsing"
+        job.progress = 50
+        print(f"{tag} Parsing intents...")
+
+        action_log = run_intent_stage(instruction_doc, None, job_id, job_dir)
+
+        job.action_log = action_log
+        job.progress = 70
+        print(f"{tag} Intent parsing complete. {len(action_log)} tool call(s).")
+
+        # ── Stage 3: Tool dispatch ────────────────────────────────────
+        if action_log:
+            job.stage = "tool_dispatch"
+            job.progress = 75
+            print(f"{tag} Dispatching {len(action_log)} tool call(s)...")
+
+            for i, action in enumerate(action_log):
+                tc = ToolCall(**action)
+                try:
+                    result = dispatch_tool_call(tc, job_dir)
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: {result}")
+                except NotImplementedError:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: skipped (not implemented)")
+                except Exception as exc:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: failed ({exc})")
+
+            print(f"{tag} Tool dispatch complete.")
+        else:
+            print(f"{tag} No tool calls to dispatch.")
+
+        # ── Copy updated output to midi-outputs/ ─────────────────────
+        output_path = os.path.join(job_dir, "output.mid")
+        if os.path.isfile(output_path):
+            job.midi_path = output_path
+            midi_outputs_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "midi-outputs",
+            )
+            os.makedirs(midi_outputs_dir, exist_ok=True)
+            persistent_path = os.path.join(midi_outputs_dir, f"{job_id}.mid")
+            shutil.copy2(output_path, persistent_path)
+            print(f"{tag} Saved to {persistent_path}")
+
+        job.progress = 100
+        job.stage = "complete"
+        job.status = "complete"
+        print(f"{tag} Edit pipeline complete!")
+
+    except Exception as e:
+        job.status = "failed"
+        job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"{tag} FAILED: {type(e).__name__}: {e}")

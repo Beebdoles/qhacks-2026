@@ -9,7 +9,7 @@ from intent.normalize import normalize_params
 
 
 def run_intent_stage(
-    instruction_doc: str, analysis: GeminiAnalysis, job_id: str, job_dir: str
+    instruction_doc: str, analysis: GeminiAnalysis | None, job_id: str, job_dir: str
 ) -> list[dict]:
     """Feed the instruction doc to Gemini and get back a list of tool calls.
 
@@ -19,7 +19,8 @@ def run_intent_stage(
 
     print(f"{tag} Running tool picker on instruction doc ({len(instruction_doc)} chars)...")
 
-    result = pick_tools(instruction_doc, analysis.segments)
+    segments = analysis.segments if analysis else []
+    result = pick_tools(instruction_doc, segments)
 
     # Normalize params for each tool call
     for tc in result.tool_calls:

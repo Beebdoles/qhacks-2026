@@ -31,5 +31,9 @@ Thumbs.db
 robert-test/
 chloe-test/
 
-# log file 
-/log_files/
+# log files
+log_files/
+
+# inputs and outputs
+backend/midi-inputs/
+backend/midi-outputs/

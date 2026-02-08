@@ -5,12 +5,15 @@ import { useEditorStore } from "@/stores/editorStore";
 import { useJobPolling } from "@/hooks/useJobPolling";
 import { PIPELINE_STAGES } from "@/lib/constants";
 
+const MUSICAL_TYPES = new Set(["singing", "humming", "beatboxing"]);
+
 export default function ProcessingOverlay() {
   const jobId = useEditorStore((s) => s.jobId);
   const jobProgress = useEditorStore((s) => s.jobProgress);
   const jobStage = useEditorStore((s) => s.jobStage);
   const setJobProgress = useEditorStore((s) => s.setJobProgress);
   const setPhase = useEditorStore((s) => s.setPhase);
+  const setErrorMessage = useEditorStore((s) => s.setErrorMessage);
 
   const job = useJobPolling(jobId);
 
@@ -19,11 +22,23 @@ export default function ProcessingOverlay() {
     setJobProgress(job.progress, job.stage);
 
     if (job.status === "complete") {
-      setPhase("editor");
+      const hasMusic = job.segments?.some((s) => MUSICAL_TYPES.has(s.type)) ?? false;
+      const hasActions = job.action_log && job.action_log.length > 0;
+
+      if (!hasMusic && !hasActions) {
+        // Nothing useful produced — show error and go back to empty
+        setPhase("empty");
+        setErrorMessage(
+          "No musical content or valid instructions were found in your recording. Try humming a melody or giving a clear command."
+        );
+      } else {
+        setPhase("editor");
+      }
     } else if (job.status === "failed") {
       setPhase("empty");
+      setErrorMessage("Something went wrong while processing your recording. Please try again.");
     }
-  }, [job, setJobProgress, setPhase]);
+  }, [job, setJobProgress, setPhase, setErrorMessage]);
 
   const stageLabel = PIPELINE_STAGES[jobStage] ?? jobStage;
 
