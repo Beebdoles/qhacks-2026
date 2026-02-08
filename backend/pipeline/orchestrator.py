@@ -1,0 +1,256 @@
+import os
+import shutil
+import subprocess
+import traceback
+
+from models import JobStatus
+from pipeline.stage_gemini import run_gemini_stage
+from pipeline.stage_transcribe import run_transcribe_stage
+from pipeline.stage_intent import run_intent_stage
+from pipeline.stage_score_builder import run_score_builder_stage
+from pipeline.stage_instrument_mapper import run_instrument_mapper_stage
+from pipeline.stage_midi_merger import run_midi_merger_stage
+from intent.schema import ToolCall
+from tools.dispatch import dispatch_tool_call
+
+# In-memory job store
+jobs: dict[str, JobStatus] = {}
+
+
+def run_pipeline(job_id: str, audio_path: str) -> None:
+    """Run the full audio-to-MIDI pipeline and update job state."""
+    job = jobs[job_id]
+    job.status = "processing"
+    job_dir = os.path.dirname(audio_path)
+    tag = f"[pipeline:{job_id[:8]}]"
+
+    try:
+        # ── Pre-processing: WebM → MP3 if needed ────────────────────
+        upload_path = audio_path
+        if audio_path.endswith(".webm"):
+            mp3_path = audio_path.rsplit(".", 1)[0] + ".mp3"
+            print(f"{tag} Converting WebM to MP3...")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", audio_path, mp3_path],
+                capture_output=True, check=True,
+            )
+            upload_path = mp3_path
+
+        # ── Stage 1: Gemini Analysis ────────────────────────────────
+        job.stage = "gemini_analysis"
+        job.progress = 5
+        print(f"{tag} Stage 1: Gemini analysis...")
+
+        analysis = run_gemini_stage(job_id, upload_path)
+
+        job.segments = analysis.segments
+        job.progress = 40
+        print(f"{tag} Stage 1 complete. {len(analysis.segments)} segments.")
+
+        # ── Stage 1.5: Speech Transcription ───────────────────────
+        job.stage = "speech_transcription"
+        job.progress = 42
+        print(f"{tag} Stage 1.5: Transcribing speech segments...")
+
+        instruction_doc = run_transcribe_stage(analysis, upload_path, job_id)
+
+        job.instruction_doc = instruction_doc
+        job.progress = 50
+        print(f"{tag} Stage 1.5 complete.")
+
+        # ── Stage 1.75: Intent Parsing ──────────────────────────────
+        job.stage = "intent_parsing"
+        job.progress = 52
+        print(f"{tag} Stage 1.75: Parsing intents from speech...")
+
+        action_log = run_intent_stage(instruction_doc, analysis, job_id, job_dir)
+
+        job.action_log = action_log
+        job.progress = 55
+        print(f"{tag} Stage 1.75 complete. {len(action_log)} actions.")
+
+        # ── Stage 2: Score Builder ──────────────────────────────────
+        job.stage = "score_building"
+        job.progress = 45
+        print(f"{tag} Stage 2: Building MusicLang scores...")
+
+        per_type_midis = run_score_builder_stage(analysis, job_dir)
+
+        job.progress = 65
+        print(f"{tag} Stage 2 complete. {len(per_type_midis)} type MIDIs.")
+
+        # ── Stage 3: Instrument Mapper ──────────────────────────────
+        job.stage = "instrument_mapping"
+        job.progress = 70
+        print(f"{tag} Stage 3: Mapping instruments...")
+
+        mapped_midis = run_instrument_mapper_stage(
+            per_type_midis, analysis.singing_instrument, job_dir
+        )
+
+        job.progress = 80
+        print(f"{tag} Stage 3 complete.")
+
+        # ── Stage 3.5: Save individual tracks to saved_tracks/ ─────
+        saved_tracks_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "saved_tracks",
+        )
+        os.makedirs(saved_tracks_dir, exist_ok=True)
+
+        for seg_type, mapped_path in mapped_midis.items():
+            if seg_type == "beatboxing":
+                track_name = "drums"
+            else:
+                track_name = analysis.singing_instrument.value  # "piano" or "flute"
+
+            dest = os.path.join(saved_tracks_dir, f"{track_name}.mid")
+            # Deduplication: append _2, _3, etc. if name already exists
+            counter = 2
+            while os.path.isfile(dest):
+                dest = os.path.join(saved_tracks_dir, f"{track_name}_{counter}.mid")
+                counter += 1
+
+            shutil.copy2(mapped_path, dest)
+            print(f"{tag} Saved track: {os.path.basename(dest)}")
+
+        # ── Stage 4: MIDI Merger ────────────────────────────────────
+        job.stage = "midi_merging"
+        job.progress = 85
+        print(f"{tag} Stage 4: Merging MIDI tracks...")
+
+        output_path = os.path.join(job_dir, "output.mid")
+        run_midi_merger_stage(mapped_midis, output_path)
+
+        job.midi_path = output_path
+        job.progress = 90
+        print(f"{tag} Stage 4 complete.")
+
+        # ── Stage 5: Tool Dispatch ────────────────────────────────
+        if action_log:
+            job.stage = "tool_dispatch"
+            job.progress = 92
+            print(f"{tag} Stage 5: Dispatching {len(action_log)} tool call(s)...")
+
+            for i, action in enumerate(action_log):
+                tc = ToolCall(**action)
+                try:
+                    result = dispatch_tool_call(tc, job_dir)
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: {result}")
+                except NotImplementedError:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: skipped (not implemented)")
+                except Exception as exc:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: failed ({exc})")
+
+            print(f"{tag} Stage 5 complete.")
+
+        # ── Copy final output to midi-outputs/ ─────────────────────
+        midi_outputs_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "midi-outputs"
+        )
+        os.makedirs(midi_outputs_dir, exist_ok=True)
+        persistent_path = os.path.join(midi_outputs_dir, f"{job_id}.mid")
+        shutil.copy2(output_path, persistent_path)
+        print(f"{tag} Saved to {persistent_path}")
+
+        job.progress = 100
+        job.stage = "complete"
+        job.status = "complete"
+        print(f"{tag} Pipeline complete! MIDI at {output_path}")
+
+    except Exception as e:
+        job.status = "failed"
+        job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"{tag} FAILED: {type(e).__name__}: {e}")
+
+
+def run_edit_pipeline(job_id: str, audio_path: str) -> None:
+    """Lightweight edit pipeline: transcribe speech → parse intent → dispatch tools."""
+    job = jobs[job_id]
+    job.status = "processing"
+    job.progress = 0
+    job.error = None
+    job_dir = os.path.dirname(audio_path)
+    tag = f"[edit:{job_id[:8]}]"
+
+    try:
+        # ── Pre-processing: WebM → MP3 if needed ────────────────────
+        upload_path = audio_path
+        if audio_path.endswith(".webm"):
+            mp3_path = audio_path.rsplit(".", 1)[0] + ".mp3"
+            print(f"{tag} Converting WebM to MP3...")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", audio_path, mp3_path],
+                capture_output=True, check=True,
+            )
+            upload_path = mp3_path
+
+        # ── Stage 1: Transcribe full audio ────────────────────────────
+        job.stage = "speech_transcription"
+        job.progress = 10
+        print(f"{tag} Transcribing voice command...")
+
+        from elevenlabs.client import ElevenLabs as _EL
+        el_client = _EL(api_key=os.getenv("ELEVENLABS_API_KEY"))
+        with open(upload_path, "rb") as f:
+            stt_result = el_client.speech_to_text.convert(model_id="scribe_v1", file=f)
+        transcription = stt_result.text.strip()
+
+        instruction_doc = f'[SPEECH]: "{transcription}"'
+        job.instruction_doc = instruction_doc
+        job.progress = 40
+        print(f"{tag} Transcription: \"{transcription}\"")
+
+        # ── Stage 2: Intent parsing ───────────────────────────────────
+        job.stage = "intent_parsing"
+        job.progress = 50
+        print(f"{tag} Parsing intents...")
+
+        action_log = run_intent_stage(instruction_doc, None, job_id, job_dir)
+
+        job.action_log = action_log
+        job.progress = 70
+        print(f"{tag} Intent parsing complete. {len(action_log)} tool call(s).")
+
+        # ── Stage 3: Tool dispatch ────────────────────────────────────
+        if action_log:
+            job.stage = "tool_dispatch"
+            job.progress = 75
+            print(f"{tag} Dispatching {len(action_log)} tool call(s)...")
+
+            for i, action in enumerate(action_log):
+                tc = ToolCall(**action)
+                try:
+                    result = dispatch_tool_call(tc, job_dir)
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: {result}")
+                except NotImplementedError:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: skipped (not implemented)")
+                except Exception as exc:
+                    print(f"{tag}   [{i+1}] {tc.tool.value}: failed ({exc})")
+
+            print(f"{tag} Tool dispatch complete.")
+        else:
+            print(f"{tag} No tool calls to dispatch.")
+
+        # ── Copy updated output to midi-outputs/ ─────────────────────
+        output_path = os.path.join(job_dir, "output.mid")
+        if os.path.isfile(output_path):
+            job.midi_path = output_path
+            midi_outputs_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "midi-outputs",
+            )
+            os.makedirs(midi_outputs_dir, exist_ok=True)
+            persistent_path = os.path.join(midi_outputs_dir, f"{job_id}.mid")
+            shutil.copy2(output_path, persistent_path)
+            print(f"{tag} Saved to {persistent_path}")
+
+        job.progress = 100
+        job.stage = "complete"
+        job.status = "complete"
+        print(f"{tag} Edit pipeline complete!")
+
+    except Exception as e:
+        job.status = "failed"
+        job.error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        print(f"{tag} FAILED: {type(e).__name__}: {e}")
