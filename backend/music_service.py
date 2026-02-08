@@ -9,8 +9,8 @@ from basic_pitch import ICASSP_2022_MODEL_PATH
 import pretty_midi
 import mido
 
-# Use CoreML model on macOS (TF SavedModel is incompatible with TF 2.20)
-_BP_MODEL = BPModel(Path(ICASSP_2022_MODEL_PATH).parent / "nmp.mlpackage")
+# Use TF SavedModel (CoreML .mlpackage only works on macOS)
+_BP_MODEL = BPModel(Path(ICASSP_2022_MODEL_PATH).parent / "nmp")
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "midi-outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
