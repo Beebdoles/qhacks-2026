@@ -100,12 +100,13 @@ async def convert_to_midi(
 @app.post("/api/autotune")
 async def autotune_to_midi(
     file: UploadFile = File(...),
+    smooth: bool = Form(True),
 ):
-    """Auto-tune an audio file (pitch-correct to nearest semitone) then convert to MIDI."""
+    """Convert audio to MIDI, optionally with smoothing (enabled by default)."""
     try:
         audio_bytes = await file.read()
         midi_bytes = await asyncio.to_thread(
-            autotune_audio, audio_bytes, file.filename or "input.mp3"
+            autotune_audio, audio_bytes, file.filename or "input.mp3", smooth
         )
         output_path = _create_output_midi_path()
         with open(output_path, "wb") as f:
