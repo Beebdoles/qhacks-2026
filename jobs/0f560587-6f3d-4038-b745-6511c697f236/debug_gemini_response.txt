@@ -1,0 +1,1 @@
+{"tempo_bpm":120,"time_signature":[4,4],"tonality":{"degree":1,"quality":"M"},"singing_instrument":"piano","segments":[{"start":0.0,"end":1.0,"type":"speech","chords":[]}]}

@@ -1,5 +1,4 @@
 import os
-import threading
 import time
 
 from dotenv import load_dotenv
@@ -8,7 +7,6 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from pipeline.orchestrator import preload_modules
 from routers.upload import router as upload_router, _executor
 
 app = FastAPI()
@@ -39,7 +37,6 @@ app.include_router(upload_router)
 def startup():
     os.makedirs("/tmp/audio_midi_jobs", exist_ok=True)
     print("[startup] Server ready to accept requests")
-    threading.Thread(target=preload_modules, daemon=True).start()
 
 
 @app.on_event("shutdown")

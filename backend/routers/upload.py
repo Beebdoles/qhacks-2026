@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api")
 
 _executor = ThreadPoolExecutor(max_workers=2)
 
-ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
+ALLOWED_EXTENSIONS = {".mp3", ".webm"}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 
 
@@ -28,7 +28,7 @@ async def upload_audio(file: UploadFile):
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
+            detail=f"Unsupported file type: {ext}. Allowed: MP3, WebM.",
         )
 
     # Read file and check size
@@ -43,7 +43,8 @@ async def upload_audio(file: UploadFile):
 
     # Create job directory and save file
     job_id = str(uuid.uuid4())
-    job_dir = os.path.join("/tmp", "audio_midi_jobs", job_id)
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    job_dir = os.path.join(os.path.dirname(backend_dir), "jobs", job_id)
     os.makedirs(job_dir, exist_ok=True)
 
     input_path = os.path.join(job_dir, f"input{ext}")
@@ -54,9 +55,8 @@ async def upload_audio(file: UploadFile):
     # Initialize job
     jobs[job_id] = JobStatus(id=job_id, status="pending", progress=0)
 
-    # Launch pipeline in background
+    # Launch full pipeline in background
     _executor.submit(run_pipeline, job_id, input_path)
-    print(f"[upload] Job {job_id[:8]} submitted to executor")
 
     return {"job_id": job_id}
 
@@ -70,15 +70,12 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/jobs/{job_id}/midi")
-async def download_midi(job_id: str):
+async def get_midi(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != "complete":
-        raise HTTPException(status_code=400, detail="Job not complete yet")
-    if not job.midi_path or not os.path.exists(job.midi_path):
-        raise HTTPException(status_code=404, detail="MIDI file not found")
-
+    if not job.midi_path or not os.path.isfile(job.midi_path):
+        raise HTTPException(status_code=404, detail="MIDI not ready yet")
     return FileResponse(
         job.midi_path,
         media_type="audio/midi",

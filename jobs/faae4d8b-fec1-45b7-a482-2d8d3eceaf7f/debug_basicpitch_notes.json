@@ -1,0 +1,44 @@
+[
+  {
+    "pitch": 56,
+    "start": 1.115,
+    "end": 1.289,
+    "velocity": 31
+  },
+  {
+    "pitch": 57,
+    "start": 2.207,
+    "end": 2.381,
+    "velocity": 31
+  },
+  {
+    "pitch": 66,
+    "start": 7.759,
+    "end": 8.016,
+    "velocity": 56
+  },
+  {
+    "pitch": 59,
+    "start": 7.759,
+    "end": 8.039,
+    "velocity": 53
+  },
+  {
+    "pitch": 60,
+    "start": 8.039,
+    "end": 8.202,
+    "velocity": 79
+  },
+  {
+    "pitch": 60,
+    "start": 9.177,
+    "end": 9.409,
+    "velocity": 65
+  },
+  {
+    "pitch": 63,
+    "start": 9.908,
+    "end": 10.397,
+    "velocity": 65
+  }
+]

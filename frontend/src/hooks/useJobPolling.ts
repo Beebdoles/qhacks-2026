@@ -6,18 +6,13 @@ interface Segment {
   type: string;
 }
 
-interface Transcription {
-  start: number;
-  end: number;
-  text: string;
-}
-
 export interface JobData {
   id: string;
   status: "pending" | "processing" | "complete" | "failed";
   progress: number;
+  stage: string;
   segments: Segment[];
-  transcriptions: Transcription[];
+  midi_path: string | null;
   error: string | null;
 }
 

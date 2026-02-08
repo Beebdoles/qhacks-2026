@@ -1,0 +1,192 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 1,
+    "quality": "M"
+  },
+  "singing_instrument": "piano",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 3.925,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 4,
+          "duration_beats": 2.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 2.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "h"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 3.925,
+      "end": 4.5,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 4.5,
+      "end": 7.5,
+      "type": "beatboxing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 6.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "s"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "s"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "s"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "s"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": -1,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 7.5,
+      "end": 8.0,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 8.0,
+      "end": 10.0,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 4,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "q"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
