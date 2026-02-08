@@ -96,13 +96,19 @@ def _normalize_mp3_to_midi(params: dict) -> dict:
 
 
 def _normalize_progression_change(params: dict) -> dict:
-    """Normalize progression to a list of chord degrees."""
+    """Normalize progression param.
+
+    Keeps scale names like "A minor" or "F# major" as strings.
+    Converts numeric chord degree sequences like "1-4-5" to int lists.
+    """
     result = dict(params)
     prog = result.get("progression")
     if isinstance(prog, str):
-        # Accept "1-4-5" or "1 4 5" formats
         parts = prog.replace("-", " ").replace(",", " ").split()
-        result["progression"] = [_to_int(p) for p in parts if p.strip()]
+        # If all parts are numeric, treat as chord degree list
+        if all(p.isdigit() for p in parts if p.strip()):
+            result["progression"] = [_to_int(p) for p in parts if p.strip()]
+        # Otherwise keep as-is (scale name like "A minor", "D major")
     elif isinstance(prog, list):
         result["progression"] = [_to_int(p) for p in prog]
     return result

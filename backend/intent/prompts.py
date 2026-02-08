@@ -17,8 +17,8 @@ to interpret the user's spoken instructions and produce a list of tool calls.
 - params.semitones: Number of semitones to shift (positive = up, negative = down). An octave = 12.
 - params.target_description: Which track to shift.
 
-**progression_change** — Change the chord progression of a track.
-- params.progression: The new progression (e.g. "1-4-5-1" or "Am Dm G C").
+**progression_change** — Change the key/scale of a track.
+- params.progression: The target key/scale name (e.g. "A minor", "D major", "F# minor").
 - params.target_description: Which track to change.
 
 **repeat_track** — Repeat/loop a track N times.

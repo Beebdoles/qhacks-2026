@@ -7,6 +7,7 @@ import shutil
 
 from intent.schema import ToolCall, ToolName
 from tools.pitch_shift import run_pitch_shift
+from tools.progression_change import run_progression_change
 
 
 # Default location for user's saved tracks
@@ -81,15 +82,17 @@ def dispatch_tool_call(tool_call: ToolCall, job_dir: str) -> str:
         print(f"{tag} pitch_shift → {midi_path}")
         return run_pitch_shift(tool_call, midi_path)
 
+    if tool_call.tool == ToolName.progression_change:
+        midi_path = resolve_midi_path(tool_call, job_dir)
+        print(f"{tag} progression_change → {midi_path}")
+        return run_progression_change(tool_call, midi_path)
+
     # TODO: wire up remaining tools
     # if tool_call.tool == ToolName.mp3_to_midi:
     #     return run_mp3_to_midi(tool_call, job_dir)
     # if tool_call.tool == ToolName.switch_instrument:
     #     midi_path = resolve_midi_path(tool_call, job_dir)
     #     return run_switch_instrument(tool_call, midi_path)
-    # if tool_call.tool == ToolName.progression_change:
-    #     midi_path = resolve_midi_path(tool_call, job_dir)
-    #     return run_progression_change(tool_call, midi_path)
     # if tool_call.tool == ToolName.repeat_track:
     #     midi_path = resolve_midi_path(tool_call, job_dir)
     #     return run_repeat_track(tool_call, midi_path)

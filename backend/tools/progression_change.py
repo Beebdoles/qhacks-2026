@@ -1,12 +1,11 @@
+# progression_change — Change the key/scale of a track.
 import os
 import tempfile
 
 import music21
 import pretty_midi
 
-# Resolve project root from this file's location (backend/toolcalls/change_scale.py)
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_LATEST_MIDI = os.path.join(_PROJECT_ROOT, "latest-job", "output.mid")
+from intent.schema import ToolCall
 
 MIDI_NOTE_MIN = 0
 MIDI_NOTE_MAX = 127
@@ -26,11 +25,7 @@ _SCALE_INTERVALS = {
 
 
 def _parse_scale_name(name: str) -> tuple[int, str]:
-    """Parse a scale name like 'A minor' or 'F# major' into (root_pc, mode).
-
-    Returns:
-        (root_pitch_class, mode) where root_pitch_class is 0-11 semitones from C.
-    """
+    """Parse a scale name like 'A minor' or 'F# major' into (root_pc, mode)."""
     parts = name.strip().split()
     if len(parts) < 2:
         raise ValueError(
@@ -54,22 +49,40 @@ def _parse_scale_name(name: str) -> tuple[int, str]:
 
 
 def _detect_key(midi_path: str) -> tuple[int, str, str]:
-    """Detect the key of a MIDI file using music21's Krumhansl-Schmuckler algorithm.
-
-    Returns:
-        (root_pitch_class, mode, key_name) e.g. (0, "major", "C major")
-    """
+    """Detect the key of a MIDI file using music21's Krumhansl-Schmuckler algorithm."""
     score = music21.converter.parse(midi_path)
     key = score.analyze("key")
+    if key is None:
+        raise RuntimeError("music21 could not detect a key from this MIDI file.")
 
-    root_name = key.tonic.name  # e.g. "C", "F#"
-    mode = key.mode             # "major" or "minor"
+    root_name = key.tonic.name
+    mode = key.mode
 
     pc = _PITCH_CLASS.get(root_name)
     if pc is None:
         raise RuntimeError(f"music21 returned unexpected tonic: {root_name!r}")
 
     return pc, mode, f"{root_name} {mode}"
+
+
+def _find_tracks(midi: pretty_midi.PrettyMIDI, description: str) -> list[pretty_midi.Instrument]:
+    """Fuzzy-match a target_description against instrument/track names.
+
+    Falls back to all non-drum instruments if no match found.
+    """
+    non_drum = [inst for inst in midi.instruments if not inst.is_drum]
+
+    if not description:
+        return non_drum
+
+    desc_lower = description.strip().lower()
+    matched = []
+    for inst in midi.instruments:
+        name = (inst.name or "").strip().lower()
+        if name and (name in desc_lower or desc_lower in name):
+            matched.append(inst)
+
+    return matched if matched else non_drum
 
 
 def _remap_note(
@@ -79,21 +92,14 @@ def _remap_note(
     dst_root: int,
     dst_intervals: list[int],
 ) -> int:
-    """Re-map a single MIDI pitch from source scale to destination scale.
-
-    Notes on a scale degree get mapped to the corresponding degree in the
-    target scale. Chromatic / passing tones just get the root transposition.
-    """
-    # Position relative to source root (0-11)
+    """Re-map a single MIDI pitch from source scale to destination scale."""
     rel = (pitch - src_root) % 12
     octave_offset = (pitch - src_root) // 12
 
     if rel in src_intervals:
-        # On a scale degree — map to corresponding degree in target
         degree_idx = src_intervals.index(rel)
         new_rel = dst_intervals[degree_idx]
     else:
-        # Chromatic tone — just transpose by root difference
         root_delta = dst_root - src_root
         return max(MIDI_NOTE_MIN, min(MIDI_NOTE_MAX, pitch + root_delta))
 
@@ -101,36 +107,46 @@ def _remap_note(
     return max(MIDI_NOTE_MIN, min(MIDI_NOTE_MAX, new_pitch))
 
 
-def change_scale(layer: str, target_scale: str) -> str:
-    """Change the key/scale of the latest job's MIDI file.
+def run_progression_change(tool_call: ToolCall, midi_path: str) -> str:
+    """Change the key/scale of a MIDI file.
 
-    Auto-detects the current key using music21, then transposes and
-    re-maps notes to the target scale.
+    Reads tool_call.params for:
+        progression (str): Target scale name, e.g. "A minor", "D major".
+        target_description (str, optional): Which track to change.
 
-    Args:
-        target_scale: Target scale name, e.g. "A minor", "D major", "F# minor".
-
-    Returns:
-        Summary string describing the transformation.
+    Auto-detects the current key using music21, then remaps notes to the
+    target scale. Modifies the MIDI file in-place (atomic write).
     """
-    if not os.path.isfile(_LATEST_MIDI):
-        raise FileNotFoundError(f"No MIDI found at {_LATEST_MIDI}")
+    tag = "[progression_change]"
 
-    # Parse target
-    dst_root, dst_mode = _parse_scale_name(target_scale)
+    if not os.path.isfile(midi_path):
+        raise FileNotFoundError(f"No MIDI found at {midi_path}")
+
+    target_scale = tool_call.params.get("progression", "")
+    target = tool_call.params.get("target_description", "")
+
+    if not target_scale:
+        raise ValueError("No target scale/key provided in 'progression' param.")
+
+    # Parse target scale
+    dst_root, dst_mode = _parse_scale_name(str(target_scale))
     dst_intervals = _SCALE_INTERVALS[dst_mode]
+    dst_name = str(target_scale).strip()
 
     # Detect current key
-    src_root, src_mode, src_name = _detect_key(_LATEST_MIDI)
+    src_root, src_mode, src_name = _detect_key(midi_path)
     src_intervals = _SCALE_INTERVALS[src_mode]
-
-    dst_name = target_scale.strip()
 
     if src_root == dst_root and src_mode == dst_mode:
         return f"Already in {src_name}, no changes needed."
 
-    # Load with pretty_midi for note manipulation
-    midi = pretty_midi.PrettyMIDI(_LATEST_MIDI)
+    # Load MIDI
+    midi = pretty_midi.PrettyMIDI(midi_path)
+
+    matched = _find_tracks(midi, target)
+    if not matched:
+        available = [inst.name for inst in midi.instruments if inst.name]
+        raise ValueError(f"No tracks matching {target!r}. Available: {available}")
 
     same_mode = src_mode == dst_mode
     root_delta = dst_root - src_root
@@ -138,29 +154,14 @@ def change_scale(layer: str, target_scale: str) -> str:
     total_changed = 0
     total_clamped = 0
 
-    # Find matching instrument/track by name
-    matched = []
-    layer_lower = layer.strip().lower()
-    for inst in midi.instruments:
-        if inst.name and inst.name.strip().lower() == layer_lower:
-            matched.append(inst)
-
-    if not matched:
-        available = [inst.name for inst in midi.instruments if inst.name]
-        raise ValueError(
-            f"Layer {layer!r} not found. Available layers: {available}"
-        )
-
     for inst in matched:
         if inst.is_drum:
             continue
 
         for note in inst.notes:
             if same_mode:
-                # Same mode — simple transposition
                 new_pitch = note.pitch + root_delta
             else:
-                # Different mode — re-map scale degrees
                 new_pitch = _remap_note(
                     note.pitch, src_root, src_intervals, dst_root, dst_intervals
                 )
@@ -173,20 +174,23 @@ def change_scale(layer: str, target_scale: str) -> str:
             total_changed += 1
 
     # Atomic write
-    dir_name = os.path.dirname(_LATEST_MIDI)
+    dir_name = os.path.dirname(midi_path)
     fd, tmp_path = tempfile.mkstemp(suffix=".mid", dir=dir_name)
     os.close(fd)
     try:
         midi.write(tmp_path)
-        os.replace(tmp_path, _LATEST_MIDI)
+        os.replace(tmp_path, midi_path)
     except Exception:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
         raise
 
-    summary = f"Changed from {src_name} to {dst_name} ({total_changed} notes modified)."
+    summary = (
+        f"Changed from {src_name} to {dst_name}"
+        f" ({total_changed} notes on {len(matched)} track(s))."
+    )
     if total_clamped:
         summary += f" ({total_clamped} notes clamped to MIDI range 0-127.)"
 
-    print(f"[change_scale] {summary}")
+    print(f"{tag} {summary}")
     return summary
