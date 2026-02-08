@@ -4,7 +4,6 @@ import { useRef, useCallback } from "react";
 import { useEditorStore } from "@/stores/editorStore";
 import TimeRuler from "./TimeRuler";
 import TrackCanvas from "./canvas/TrackCanvas";
-import ProcessingOverlay from "./ProcessingOverlay";
 
 interface TimelineAreaProps {
   onSeek: (time: number) => void;
@@ -12,7 +11,6 @@ interface TimelineAreaProps {
 
 export default function TimelineArea({ onSeek }: TimelineAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const phase = useEditorStore((s) => s.phase);
   const viewport = useEditorStore((s) => s.viewport);
   const setScrollX = useEditorStore((s) => s.setScrollX);
 
@@ -40,8 +38,6 @@ export default function TimelineArea({ onSeek }: TimelineAreaProps) {
         </div>
       </div>
 
-      {/* Processing overlay */}
-      {phase === "processing" && <ProcessingOverlay />}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import TimelineArea from "@/components/TimelineArea";
 import StatusBar from "@/components/StatusBar";
 import EditProgressToast from "@/components/EditProgressToast";
 import EditErrorModal from "@/components/EditErrorModal";
+import ProcessingOverlay from "@/components/ProcessingOverlay";
 import { audioEngine, setStoreGetter } from "@/lib/AudioEngine";
 import { loadAllSavedTracks } from "@/lib/midi-utils";
 
@@ -219,6 +220,9 @@ export default function Home() {
 
       {/* Status bar */}
       <StatusBar />
+
+      {/* Full-screen processing overlay */}
+      {phase === "processing" && <ProcessingOverlay />}
 
       {/* Error modal — shared by both full pipeline and edit flow */}
       {errorMessage && (

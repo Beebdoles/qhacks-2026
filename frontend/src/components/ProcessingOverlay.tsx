@@ -43,7 +43,7 @@ export default function ProcessingOverlay() {
   const stageLabel = PIPELINE_STAGES[jobStage] ?? jobStage;
 
   return (
-    <div className="absolute inset-0 bg-surface-900/90 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-surface-900/90 flex flex-col items-center justify-center z-50 backdrop-blur-sm">
       {/* Spinner */}
       <div className="relative mb-6">
         <svg className="animate-spin h-12 w-12 text-accent" viewBox="0 0 24 24">

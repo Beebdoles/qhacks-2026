@@ -22,11 +22,12 @@ export default function Toolbar({ onPlay, onStop, onExport }: ToolbarProps) {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 min-w-[160px]">
-        <div className="w-6 h-6 rounded bg-accent flex items-center justify-center">
-          <span className="text-white text-xs font-bold">O</span>
-        </div>
+        <img
+          src="/compressedPurpleLogo.png"
+          alt="Purple orca"
+          className="h-7 w-7 object-contain"
+        />
         <span className="text-sm font-semibold text-text-primary">Orca</span>
-        <span className="text-xs text-text-tertiary ml-1">MIDI Editor</span>
       </div>
 
       {/* Spacer */}
