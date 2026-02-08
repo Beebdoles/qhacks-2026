@@ -5,6 +5,7 @@ import traceback
 from models import JobStatus
 from pipeline.stage_gemini import run_gemini_stage
 from pipeline.stage_transcribe import run_transcribe_stage
+from pipeline.stage_intent import run_intent_stage
 from pipeline.stage_score_builder import run_score_builder_stage
 from pipeline.stage_instrument_mapper import run_instrument_mapper_stage
 from pipeline.stage_midi_merger import run_midi_merger_stage
@@ -53,6 +54,17 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         job.instruction_doc = instruction_doc
         job.progress = 50
         print(f"{tag} Stage 1.5 complete.")
+
+        # ── Stage 1.75: Intent Parsing ──────────────────────────────
+        job.stage = "intent_parsing"
+        job.progress = 52
+        print(f"{tag} Stage 1.75: Parsing intents from speech...")
+
+        action_log = run_intent_stage(instruction_doc, analysis, job_id, job_dir)
+
+        job.action_log = action_log
+        job.progress = 55
+        print(f"{tag} Stage 1.75 complete. {len(action_log)} actions.")
 
         # ── Stage 2: Score Builder ──────────────────────────────────
         job.stage = "score_building"

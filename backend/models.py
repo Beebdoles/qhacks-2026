@@ -84,4 +84,5 @@ class JobStatus(BaseModel):
     segments: list[Segment] = []
     midi_path: str | None = None
     instruction_doc: str | None = None
+    action_log: list[dict] = []
     error: str | None = None
