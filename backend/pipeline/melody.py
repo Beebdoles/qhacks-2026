@@ -9,6 +9,7 @@ from models import NoteEvent
 
 BASICPITCH_TIMEOUT = 120  # seconds for full audio
 MIN_DURATION = 0.05       # ignore notes shorter than 50ms
+MIN_VELOCITY = 35         # ignore quiet detections (likely noise/harmonics)
 MERGE_GAP = 0.08          # merge notes with gap < 80ms
 PITCH_TOLERANCE = 1       # merge notes within 1 semitone
 LEGATO_FILL = 0.15        # fill gaps shorter than 150ms between notes
@@ -33,8 +34,8 @@ def _smooth_notes(notes: list[NoteEvent]) -> list[NoteEvent]:
     if not notes:
         return notes
 
-    # Filter out very short notes
-    notes = [n for n in notes if (n.end - n.start) >= MIN_DURATION]
+    # Filter out very short and very quiet notes (noise/harmonics)
+    notes = [n for n in notes if (n.end - n.start) >= MIN_DURATION and n.velocity >= MIN_VELOCITY]
     if not notes:
         return []
 
@@ -85,7 +86,12 @@ def extract_melody(audio_path: str) -> list[NoteEvent]:
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(predict, wav_path)
+            future = ex.submit(
+                predict, wav_path,
+                onset_threshold=0.4,
+                frame_threshold=0.25,
+                minimum_note_length=80,
+            )
             try:
                 _, _, note_events = future.result(timeout=BASICPITCH_TIMEOUT)
             except concurrent.futures.TimeoutError:

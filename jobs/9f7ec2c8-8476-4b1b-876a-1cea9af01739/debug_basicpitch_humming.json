@@ -1,0 +1,38 @@
+[
+  {
+    "pitch": 68,
+    "start": 0.0,
+    "end": 0.1160000000000001,
+    "velocity": 70
+  },
+  {
+    "pitch": 71,
+    "start": 0.3720000000000001,
+    "end": 0.685,
+    "velocity": 97
+  },
+  {
+    "pitch": 66,
+    "start": 3.0679999999999996,
+    "end": 3.3,
+    "velocity": 92
+  },
+  {
+    "pitch": 63,
+    "start": 3.3,
+    "end": 3.683,
+    "velocity": 86
+  },
+  {
+    "pitch": 61,
+    "start": 3.683,
+    "end": 3.9850000000000003,
+    "velocity": 100
+  },
+  {
+    "pitch": 69,
+    "start": 8.074,
+    "end": 8.19,
+    "velocity": 86
+  }
+]

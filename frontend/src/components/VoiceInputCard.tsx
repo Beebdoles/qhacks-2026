@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useEditorStore } from "@/stores/editorStore";
 
@@ -18,8 +18,19 @@ export default function VoiceInputCard() {
     setVoiceState("review");
   }, [setRecordedFile]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const { recorderState, elapsedSeconds, error, startRecording, stopRecording } =
     useAudioRecorder(handleRecordingComplete);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRecordedFile(file);
+    setRecordedDuration(0);
+    setVoiceState("review");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleStart = () => {
     startRecording();
@@ -77,12 +88,27 @@ export default function VoiceInputCard() {
           </div>
           <p className="text-xs text-text-tertiary mb-3">Ready</p>
           {error && <p className="text-xs text-recording mb-2">{error}</p>}
-          <button
-            onClick={handleStart}
-            className="w-full py-2 px-3 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-all duration-150 cursor-pointer"
-          >
-            Start Recording
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleStart}
+              className="flex-1 py-2 px-3 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-md transition-all duration-150 cursor-pointer"
+            >
+              Record
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 py-2 px-3 bg-surface-600 hover:brightness-90 text-text-secondary text-sm font-medium rounded-md transition-all duration-150 cursor-pointer"
+            >
+              Upload MP3
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".mp3,audio/mpeg"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
         </>
       )}
 

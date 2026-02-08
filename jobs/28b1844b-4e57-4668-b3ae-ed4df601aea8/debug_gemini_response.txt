@@ -1,0 +1,289 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [4, 4],
+  "tonality": {
+    "degree": 1,
+    "quality": "M"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 0.8,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "h"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 0.8,
+      "end": 0.95,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 0.95,
+      "end": 1.7,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 5,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 1.7,
+      "end": 2.47,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 2.47,
+      "end": 3.6,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 4,
+          "duration_beats": 3.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 5,
+                "octave": -1,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 3.6,
+      "end": 4.02,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 4.02,
+      "end": 5.0,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 2,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 5.0,
+      "end": 5.93,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 5.93,
+      "end": 6.6,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 4,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 0,
+                "octave": 1,
+                "duration": "e"
+              },
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 6.6,
+      "end": 6.84,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 6.84,
+      "end": 7.4,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 5,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 7.4,
+      "end": 7.85,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 7.85,
+      "end": 8.4,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 1.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 8.4,
+      "end": 9.02,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 9.02,
+      "end": 9.2,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 6,
+          "duration_beats": 0.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 9.2,
+      "end": 10.0,
+      "type": "silence",
+      "chords": []
+    }
+  ]
+}

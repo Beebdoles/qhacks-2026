@@ -79,6 +79,7 @@ def build_tonality(tonality: Tonality):
 # ── Direct MIDI from BasicPitch notes ─────────────────────────────────
 
 MELODY_TYPES = {"singing", "humming"}
+MIN_NOTES_PER_SEC = 0.5  # fallback to MusicLang if BasicPitch is too sparse
 
 
 def _notes_in_range(
@@ -86,6 +87,105 @@ def _notes_in_range(
 ) -> list[NoteEvent]:
     """Filter notes whose onset falls within [start, end)."""
     return [n for n in notes if start <= n.start < end]
+
+
+def _make_monophonic(notes: list[NoteEvent]) -> list[NoteEvent]:
+    """Resolve overlapping notes for monophonic sources (humming/singing).
+
+    At any point in time only the loudest note survives. Overlapping notes
+    have their durations trimmed so they don't overlap.
+    """
+    if len(notes) <= 1:
+        return notes
+
+    notes = sorted(notes, key=lambda n: n.start)
+    result: list[NoteEvent] = []
+
+    for note in notes:
+        # Trim/remove any previous notes that overlap with this one
+        trimmed: list[NoteEvent] = []
+        for prev in result:
+            if prev.end <= note.start:
+                # No overlap
+                trimmed.append(prev)
+            else:
+                # Overlap: keep the louder one for the overlapping region
+                if prev.velocity >= note.velocity:
+                    # Previous note is louder — truncate current note's start
+                    note = NoteEvent(
+                        pitch=note.pitch,
+                        start=max(note.start, prev.end),
+                        end=note.end,
+                        velocity=note.velocity,
+                    )
+                    trimmed.append(prev)
+                else:
+                    # Current note is louder — trim previous note
+                    if prev.start < note.start:
+                        trimmed.append(NoteEvent(
+                            pitch=prev.pitch,
+                            start=prev.start,
+                            end=note.start,
+                            velocity=prev.velocity,
+                        ))
+        result = trimmed
+
+        # Only add if note still has positive duration
+        if note.end > note.start + 0.02:
+            result.append(note)
+
+    return result
+
+
+def _merge_consecutive(notes: list[NoteEvent], max_gap: float = 0.2) -> list[NoteEvent]:
+    """Merge consecutive notes with the same pitch and small gaps."""
+    if len(notes) <= 1:
+        return notes
+
+    notes = sorted(notes, key=lambda n: n.start)
+    merged: list[NoteEvent] = [notes[0]]
+
+    for note in notes[1:]:
+        prev = merged[-1]
+        gap = note.start - prev.end
+        if note.pitch == prev.pitch and gap <= max_gap:
+            # Merge into one longer note
+            merged[-1] = NoteEvent(
+                pitch=prev.pitch,
+                start=prev.start,
+                end=note.end,
+                velocity=max(prev.velocity, note.velocity),
+            )
+        else:
+            # Fill small gaps with legato (extend previous note)
+            if 0 < gap <= 0.15:
+                merged[-1] = NoteEvent(
+                    pitch=prev.pitch,
+                    start=prev.start,
+                    end=note.start,
+                    velocity=prev.velocity,
+                )
+            merged.append(note)
+
+    return merged
+
+
+def _normalize_velocity(notes: list[NoteEvent], target_min: int = 70, target_max: int = 100) -> list[NoteEvent]:
+    """Scale velocities to a consistent range so notes aren't too quiet."""
+    if not notes:
+        return notes
+    vels = [n.velocity for n in notes]
+    lo, hi = min(vels), max(vels)
+    spread = hi - lo if hi > lo else 1
+    return [
+        NoteEvent(
+            pitch=n.pitch,
+            start=n.start,
+            end=n.end,
+            velocity=int(target_min + (n.velocity - lo) / spread * (target_max - target_min)),
+        )
+        for n in notes
+    ]
 
 
 def _build_midi_from_notes(
@@ -170,32 +270,46 @@ def run_score_builder_stage(
     for seg_type, segments in segments_by_type.items():
         midi_path = os.path.join(job_dir, f"{seg_type}.mid")
 
+        # Check if BasicPitch has enough notes for singing/humming
+        use_basicpitch = False
         if seg_type in MELODY_TYPES and extracted_notes:
-            # Use BasicPitch notes directly for singing/humming
             relevant_notes = []
             for seg in segments:
                 relevant_notes.extend(_notes_in_range(extracted_notes, seg.start, seg.end))
 
-            # Shift notes to start at time 0 so all tracks overlap
-            if relevant_notes:
-                earliest = min(n.start for n in relevant_notes)
-                relevant_notes = [
-                    NoteEvent(
-                        pitch=n.pitch,
-                        start=n.start - earliest,
-                        end=n.end - earliest,
-                        velocity=n.velocity,
-                    )
-                    for n in relevant_notes
-                ]
+            total_duration = sum(seg.end - seg.start for seg in segments)
+            note_density = len(relevant_notes) / max(total_duration, 0.1)
 
-            # Dump BasicPitch notes used for this segment type
-            with open(os.path.join(job_dir, f"debug_basicpitch_{seg_type}.json"), "w") as f:
-                json.dump([n.model_dump() for n in relevant_notes], f, indent=2)
+            if note_density >= MIN_NOTES_PER_SEC:
+                use_basicpitch = True
+                # Shift notes to start at time 0 so all tracks overlap
+                if relevant_notes:
+                    earliest = min(n.start for n in relevant_notes)
+                    relevant_notes = [
+                        NoteEvent(
+                            pitch=n.pitch,
+                            start=n.start - earliest,
+                            end=n.end - earliest,
+                            velocity=n.velocity,
+                        )
+                        for n in relevant_notes
+                    ]
 
-            _build_midi_from_notes(relevant_notes, tempo, time_sig, midi_path)
-            print(f"[score_builder] {seg_type} -> {midi_path} (BasicPitch: {len(relevant_notes)} notes)")
-        else:
+                # Only resolve overlapping notes (monophonic vocal source)
+                raw_count = len(relevant_notes)
+                relevant_notes = _make_monophonic(relevant_notes)
+                print(f"[score_builder] {seg_type}: {raw_count} raw -> {len(relevant_notes)} notes (monophonic)")
+
+                # Dump cleaned BasicPitch notes
+                with open(os.path.join(job_dir, f"debug_basicpitch_{seg_type}.json"), "w") as f:
+                    json.dump([n.model_dump() for n in relevant_notes], f, indent=2)
+
+                _build_midi_from_notes(relevant_notes, tempo, time_sig, midi_path)
+                print(f"[score_builder] {seg_type} -> {midi_path} (BasicPitch: {len(relevant_notes)} notes, density={note_density:.1f}/s)")
+            else:
+                print(f"[score_builder] {seg_type}: BasicPitch too sparse ({len(relevant_notes)} notes, {note_density:.2f}/s), falling back to MusicLang")
+
+        if not use_basicpitch:
             # Use Gemini → MusicLang for beatboxing and fallback
             # (MusicLang already starts at time 0)
             chord_list = []

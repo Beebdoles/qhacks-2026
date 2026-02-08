@@ -6,8 +6,8 @@ SINGING_PROGRAMS = {"piano": 0, "flute": 73}
 
 BASE_TRACK_INSTRUMENTS = {
     "beatboxing": {"channel": 9, "program": 0, "is_drum": True},
-    "singing": {"channel": 1, "program": 73},
-    "humming": {"channel": 1, "program": 73},
+    "singing": {"channel": 1, "program": 0},   # piano
+    "humming": {"channel": 1, "program": 0},    # piano
 }
 
 
@@ -23,10 +23,10 @@ def run_instrument_mapper_stage(
     # Build per-invocation instrument map (thread-safe, no globals)
     track_instruments = dict(BASE_TRACK_INSTRUMENTS)
 
-    # Apply Gemini's singing instrument choice
-    program = SINGING_PROGRAMS.get(singing_instrument.value, 73)
-    track_instruments["singing"] = {"channel": 1, "program": program}
-    track_instruments["humming"] = {"channel": 1, "program": program}
+    # Force piano for now (TODO: re-enable Gemini instrument choice)
+    # program = SINGING_PROGRAMS.get(singing_instrument.value, 0)
+    # track_instruments["singing"] = {"channel": 1, "program": program}
+    # track_instruments["humming"] = {"channel": 1, "program": program}
 
     # Thread-safe fallback state
     fallback_state = {"next_channel": 2}
