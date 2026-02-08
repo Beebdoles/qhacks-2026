@@ -48,7 +48,7 @@ def run_audio_to_midi_stage(
                 segment_index=seg_idx,
                 segment_type=seg.type,
                 midi_path=midi_path,
-                start_offset=seg.start,
+                start_offset=0.0,
                 instrument=instrument,
             ))
             print(f"[audio_to_midi] Segment {seg_idx} ({seg_type}): OK -> {midi_filename}")
