@@ -1,0 +1,107 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 2,
+    "quality": "M"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 1.55,
+      "type": "speech",
+      "chords": []
+    },
+    {
+      "start": 1.55,
+      "end": 6.8,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 4,
+          "duration_beats": 4,
+          "instruments": {
+            "flute": [
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 4,
+          "instruments": {
+            "flute": [
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "h"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 5,
+          "duration_beats": 2.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 6.8,
+      "end": 7.0,
+      "type": "silence",
+      "chords": []
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "tonality": {
+    "degree": 1,
+    "quality": "m"
+  },
+  "tempo": 90,
+  "time_sig": [
+    4,
+    4
+  ],
+  "chords": [
+    {
+      "degree": 1,
+      "duration_beats": 4.5,
+      "instruments": {
+        "piano": [
+          {
+            "s": 0,
+            "octave": -2,
+            "duration": "e"
+          },
+          {
+            "s": 0,
+            "octave": -2,
+            "duration": "e"
+          },
+          {
+            "s": 2,
+            "octave": -1,
+            "duration": "q"
+          },
+          {
+            "s": 0,
+            "octave": -2,
+            "duration": "e"
+          },
+          {
+            "s": 0,
+            "octave": -2,
+            "duration": "e"
+          },
+          {
+            "s": 2,
+            "octave": -1,
+            "duration": "q"
+          },
+          {
+            "s": 1,
+            "octave": -2,
+            "duration": "e"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "tempo_bpm": 126,
+  "time_signature": [4, 4],
+  "tonality": {
+    "degree": 4,
+    "quality": "m"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 0.4,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 0.4,
+      "end": 4.2,
+      "type": "beatboxing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {"s": 0, "octave": -2, "duration": "e"},
+              {"s": 0, "octave": -2, "duration": "e"},
+              {"s": 4, "octave": -1, "duration": "q"},
+              {"s": 0, "octave": -2, "duration": "q"},
+              {"s": 4, "octave": -1, "duration": "q"}
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {"s": 0, "octave": -2, "duration": "e"},
+              {"s": 0, "octave": -2, "duration": "e"},
+              {"s": 4, "octave": -1, "duration": "q"},
+              {"s": 0, "octave": -2, "duration": "q"},
+              {"s": 4, "octave": -1, "duration": "q"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 4.2,
+      "end": 5.0,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 5.0,
+      "end": 8.3,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "flute": [
+              {"s": 2, "octave": 0, "duration": "q"},
+              {"s": 4, "octave": 0, "duration": "q"},
+              {"s": 5, "octave": 0, "duration": "e"},
+              {"s": 6, "octave": 0, "duration": "e"},
+              {"s": 5, "octave": 0, "duration": "q"}
+            ]
+          }
+        },
+        {
+          "degree": 4,
+          "duration_beats": 3.0,
+          "instruments": {
+            "flute": [
+              {"s": 0, "octave": 0, "duration": "q"},
+              {"s": 6, "octave": 0, "duration": "h"}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

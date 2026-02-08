@@ -1,0 +1,296 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 1,
+    "quality": "M"
+  },
+  "singing_instrument": "piano",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 0.8,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 1.6,
+          "instruments": {
+            "piano": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 0.8,
+      "end": 1.1,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 0.6,
+          "instruments": {
+            "piano": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 1.1,
+      "end": 1.3,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 1.3,
+      "end": 1.7,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 0.8,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": 1,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 1.7,
+      "end": 2.4,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 2.4,
+      "end": 3.6,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 2.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "s"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "s"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 3.6,
+      "end": 4.0,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 4.0,
+      "end": 5.0,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 5,
+          "duration_beats": 2.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 5.0,
+      "end": 5.9,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 5.9,
+      "end": 6.6,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 6,
+          "duration_beats": 1.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 1,
+                "octave": 1,
+                "duration": "s"
+              },
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "s"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 6.6,
+      "end": 6.8,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 6.8,
+      "end": 7.5,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 4,
+          "duration_beats": 1.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "s"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "s"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 7.5,
+      "end": 7.8,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 7.8,
+      "end": 8.5,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 1.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": 1,
+                "duration": "s"
+              },
+              {
+                "s": 5,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 8.5,
+      "end": 9.0,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 9.0,
+      "end": 9.2,
+      "type": "singing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 0.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 6,
+                "octave": 0,
+                "duration": "s"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "pitch": 49,
+    "start": 0.012,
+    "end": 1.498,
+    "velocity": 98
+  },
+  {
+    "pitch": 52,
+    "start": 1.498,
+    "end": 2.997,
+    "velocity": 100
+  },
+  {
+    "pitch": 54,
+    "start": 2.997,
+    "end": 3.996,
+    "velocity": 100
+  },
+  {
+    "pitch": 57,
+    "start": 3.996,
+    "end": 5.506,
+    "velocity": 101
+  },
+  {
+    "pitch": 60,
+    "start": 5.506,
+    "end": 7.005,
+    "velocity": 102
+  },
+  {
+    "pitch": 58,
+    "start": 7.005,
+    "end": 7.993,
+    "velocity": 99
+  },
+  {
+    "pitch": 56,
+    "start": 7.993,
+    "end": 9.502,
+    "velocity": 97
+  },
+  {
+    "pitch": 54,
+    "start": 9.502,
+    "end": 10.003,
+    "velocity": 49
+  },
+  {
+    "pitch": 52,
+    "start": 10.003,
+    "end": 11.001,
+    "velocity": 98
+  },
+  {
+    "pitch": 48,
+    "start": 11.001,
+    "end": 13.127,
+    "velocity": 95
+  },
+  {
+    "pitch": 67,
+    "start": 13.127,
+    "end": 13.487,
+    "velocity": 55
+  },
+  {
+    "pitch": 49,
+    "start": 13.127,
+    "end": 13.498,
+    "velocity": 73
+  }
+]

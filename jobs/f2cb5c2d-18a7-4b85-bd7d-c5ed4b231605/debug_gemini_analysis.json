@@ -1,0 +1,96 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 1,
+    "quality": "M"
+  },
+  "singing_instrument": "piano",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 4.2,
+      "type": "beatboxing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 4.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 3,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 0.4,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "s"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 4.2,
+      "end": 6.0,
+      "type": "silence",
+      "chords": []
+    }
+  ]
+}

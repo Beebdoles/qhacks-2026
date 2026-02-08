@@ -13,6 +13,7 @@ export default function InstructionsCard() {
   const [savedFilename, setSavedFilename] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobId = useEditorStore((s) => s.jobId);
+  const bumpMidiVersion = useEditorStore((s) => s.bumpMidiVersion);
 
   const handleRecordingComplete = useCallback((file: File) => {
     setRecordedFile(file);
@@ -62,6 +63,9 @@ export default function InstructionsCard() {
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       setSavedFilename(data.filename);
+      if (data.midi_updated) {
+        bumpMidiVersion();
+      }
       setCardState("done");
       // Reset after a few seconds
       setTimeout(() => {

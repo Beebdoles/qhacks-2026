@@ -32,6 +32,10 @@ interface EditorState {
   setPixelsPerSecond: (pps: number) => void;
   setTotalDuration: (d: number) => void;
 
+  // MIDI version counter (bump to trigger reload)
+  midiVersion: number;
+  bumpMidiVersion: () => void;
+
   // Recorded audio file (for upload)
   recordedFile: File | null;
   setRecordedFile: (f: File | null) => void;
@@ -79,6 +83,9 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((s) => ({ viewport: { ...s.viewport, pixelsPerSecond } })),
   setTotalDuration: (totalDuration) =>
     set((s) => ({ viewport: { ...s.viewport, totalDuration } })),
+
+  midiVersion: 0,
+  bumpMidiVersion: () => set((s) => ({ midiVersion: s.midiVersion + 1 })),
 
   recordedFile: null,
   setRecordedFile: (recordedFile) => set({ recordedFile }),

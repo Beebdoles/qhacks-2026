@@ -16,6 +16,7 @@ setStoreGetter(() => useEditorStore.getState());
 export default function Home() {
   const phase = useEditorStore((s) => s.phase);
   const jobId = useEditorStore((s) => s.jobId);
+  const midiVersion = useEditorStore((s) => s.midiVersion);
 
   // Drive playhead animation
   useAnimationFrame();
@@ -28,7 +29,8 @@ export default function Home() {
 
     async function loadMidi() {
       try {
-        const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi`);
+        const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi?v=${midiVersion}`);
+
         if (cancelled) return;
 
         const { tracks, duration, bpm, timeSignature } = parseMidiToTracks(arrayBuffer);
@@ -48,7 +50,7 @@ export default function Home() {
 
     loadMidi();
     return () => { cancelled = true; };
-  }, [phase, jobId]);
+  }, [phase, jobId, midiVersion]);
 
   // Sync mute toggles with audio engine GainNodes
   useEffect(() => {

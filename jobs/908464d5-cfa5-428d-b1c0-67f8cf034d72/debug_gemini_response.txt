@@ -1,0 +1,134 @@
+{
+  "tempo_bpm": 60,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 1,
+    "quality": "m"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0,
+      "end": 13.5,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 3,
+          "instruments": {
+            "flute": [
+              {
+                "s": 0,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "duration": "q"
+              },
+              {
+                "s": 2,
+                "duration": "e"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 4,
+          "duration_beats": 1,
+          "instruments": {
+            "flute": [
+              {
+                "s": 3,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 6,
+          "duration_beats": 3,
+          "instruments": {
+            "flute": [
+              {
+                "s": 5,
+                "duration": "q"
+              },
+              {
+                "s": 5,
+                "duration": "e"
+              },
+              {
+                "s": 6,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "duration": "e"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 5,
+          "duration_beats": 2.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 5,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "duration": "e"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 4,
+          "duration_beats": 1.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 3,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 2.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "h"
+              },
+              {
+                "s": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

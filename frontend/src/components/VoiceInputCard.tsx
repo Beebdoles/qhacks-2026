@@ -52,6 +52,8 @@ export default function VoiceInputCard() {
     const file = useEditorStore.getState().recordedFile;
     if (!file) return;
 
+    // Clear old jobId first so ProcessingOverlay doesn't poll a stale completed job
+    setJobId(null);
     setPhase("processing");
 
     const formData = new FormData();

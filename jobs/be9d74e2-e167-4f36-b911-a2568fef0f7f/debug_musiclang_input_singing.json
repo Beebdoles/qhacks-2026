@@ -1,0 +1,26 @@
+{
+  "tonality": {
+    "degree": 1,
+    "quality": "M"
+  },
+  "tempo": 120,
+  "time_sig": [
+    4,
+    4
+  ],
+  "chords": [
+    {
+      "degree": 1,
+      "duration_beats": 4.0,
+      "instruments": {
+        "flute": [
+          {
+            "s": 0,
+            "octave": 0,
+            "duration": "w"
+          }
+        ]
+      }
+    }
+  ]
+}

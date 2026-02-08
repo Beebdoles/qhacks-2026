@@ -1,0 +1,74 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 6,
+    "quality": "M"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 0.267,
+      "type": "silence",
+      "chords": []
+    },
+    {
+      "start": 0.267,
+      "end": 2.267,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 5,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 1,
+                "octave": 0,
+                "duration": "q"
+              }
+            ]
+          }
+        },
+        {
+          "degree": 1,
+          "duration_beats": 2.0,
+          "instruments": {
+            "flute": [
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 3,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 4,
+                "octave": 0,
+                "duration": "e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 2.267,
+      "end": 2.3,
+      "type": "silence",
+      "chords": []
+    }
+  ]
+}

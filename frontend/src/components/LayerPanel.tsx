@@ -36,10 +36,8 @@ export default function LayerPanel() {
         ))}
       </div>
 
-      {/* Voice input card — only show in empty/recording/review states */}
-      {(phase === "empty" || phase === "recording" || phase === "review") && (
-        <VoiceInputCard />
-      )}
+      {/* Voice input card — show in empty/recording/review and editor states */}
+      {phase !== "processing" && <VoiceInputCard />}
 
       {/* Instructions card — show in editor phase */}
       {phase === "editor" && <InstructionsCard />}

@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 
 from models import JobStatus
 from pipeline.orchestrator import jobs, run_pipeline
+from toolcalls.main import apply_instructions
 
 router = APIRouter(prefix="/api")
 
@@ -44,8 +45,20 @@ async def upload_audio(file: UploadFile):
     # Create job directory and save file
     job_id = str(uuid.uuid4())
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    job_dir = os.path.join(os.path.dirname(backend_dir), "jobs", job_id)
+    project_root = os.path.dirname(backend_dir)
+    job_dir = os.path.join(project_root, "jobs", job_id)
     os.makedirs(job_dir, exist_ok=True)
+
+    # Update latest-job symlink at project root
+    latest_link = os.path.join(project_root, "latest-job")
+    try:
+        if os.path.islink(latest_link):
+            os.remove(latest_link)
+        elif os.path.exists(latest_link):
+            os.remove(latest_link)
+        os.symlink(job_dir, latest_link)
+    except OSError:
+        pass  # non-critical
 
     input_path = os.path.join(job_dir, f"input{ext}")
     with open(input_path, "wb") as f:
@@ -103,7 +116,16 @@ async def upload_instructions(job_id: str, file: UploadFile):
         f.write(content)
 
     print(f"[upload] Saved instruction audio: {path} ({len(content)} bytes)")
-    return {"status": "ok", "filename": filename}
+
+    # Apply hardcoded toolcall (pitch shift test)
+    try:
+        result = apply_instructions()
+        print(f"[upload] Toolcall result: {result}")
+    except Exception as e:
+        print(f"[upload] Toolcall error: {e}")
+        return {"status": "ok", "filename": filename, "toolcall_error": str(e)}
+
+    return {"status": "ok", "filename": filename, "midi_updated": True}
 
 
 @router.get("/jobs/{job_id}/midi")
@@ -117,4 +139,17 @@ async def get_midi(job_id: str):
         job.midi_path,
         media_type="audio/midi",
         filename="output.mid",
+    )
+
+@router.get("/jobs/{job_id}/midi_hardcode")
+async def get_midi_hardcode(job_id: str): 
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="yob not found")
+    if not job.midi_path or not os.path.isfile(job.midi_path):
+        raise HTTPException(status_code=404, detail="midi no ready erfnerunferfre")
+    return FileResponse(
+        "/home/beebdoles/workspace/qhacks-2026/hardcode/scale.mid",
+        media_type="audio/midi",
+        filename="scale.mid",
     )

@@ -1,0 +1,129 @@
+{
+  "tempo_bpm": 120,
+  "time_signature": [
+    4,
+    4
+  ],
+  "tonality": {
+    "degree": 1,
+    "quality": "m"
+  },
+  "singing_instrument": "flute",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 5.0,
+      "type": "beatboxing",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 10.0,
+          "instruments": {
+            "piano": [
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 2,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": -2,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -2,
+                "duration": "q"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "start": 5.0,
+      "end": 8.237,
+      "type": "humming",
+      "chords": [
+        {
+          "degree": 1,
+          "duration_beats": 6.5,
+          "instruments": {
+            "flute": [
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 6,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 2,
+                "octave": 0,
+                "duration": "e"
+              },
+              {
+                "s": 0,
+                "octave": 0,
+                "duration": "q"
+              },
+              {
+                "s": 5,
+                "octave": -1,
+                "duration": "q"
+              },
+              {
+                "s": 4,
+                "octave": -1,
+                "duration": "q"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
