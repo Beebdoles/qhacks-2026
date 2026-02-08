@@ -1,50 +1,15 @@
-import asyncio
-import traceback
-from contextlib import asynccontextmanager
-from typing import Optional
+import os
+import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
-from music_service import MusicService, ensure_midi_bytes, convert_audio_to_midi, autotune_audio, _create_output_midi_path
-
 load_dotenv()
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# --- Request schemas ---
+from routers.upload import router as upload_router, _executor
 
-
-class GenerateRequest(BaseModel):
-    prompt: Optional[str] = Field(
-        None,
-        description="Natural language description, e.g. 'a sad piano piece in C minor at 80 BPM'. "
-        "When provided, the LLM resolves generation parameters automatically.",
-    )
-    chord_progression: Optional[str] = Field(
-        None,
-        description="Chord progression like 'Am CM Dm E7 Am'. If omitted, generates freely.",
-    )
-    nb_tokens: int = Field(1024, ge=64, le=4096)
-    temperature: float = Field(0.9, gt=0.0, le=1.0)
-    topp: float = Field(1.0, gt=0.0, le=1.0)
-    rng_seed: int = Field(0, ge=0, description="0 for random")
-    tempo: int = Field(120, ge=40, le=300)
-    time_signature: tuple[int, int] = Field((4, 4))
-
-
-# --- App lifespan ---
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.music_service = MusicService()
-    app.state.predict_lock = asyncio.Lock()
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,7 +20,28 @@ app.add_middleware(
 )
 
 
-# --- Existing endpoints ---
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start = time.time()
+    print(f"[api] {request.method} {request.url.path} started")
+    response = await call_next(request)
+    elapsed = time.time() - start
+    print(f"[api] {request.method} {request.url.path} completed — {response.status_code} ({elapsed:.2f}s)")
+    return response
+
+
+app.include_router(upload_router)
+
+
+@app.on_event("startup")
+def startup():
+    os.makedirs("/tmp/audio_midi_jobs", exist_ok=True)
+    print("[startup] Server ready to accept requests")
+
+
+@app.on_event("shutdown")
+def shutdown():
+    _executor.shutdown(wait=False, cancel_futures=True)
 
 
 @app.get("/api/health")

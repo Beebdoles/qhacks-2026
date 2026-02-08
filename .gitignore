@@ -10,6 +10,7 @@ build/
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # Node / Next.js
 node_modules/
@@ -33,3 +34,10 @@ backend/midi-inputs/
 # Local experiments
 robert-test/
 chloe-test/
+
+# log files
+log_files/
+
+# inputs and outputs
+backend/midi-inputs/
+backend/midi-outputs/
