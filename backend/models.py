@@ -18,10 +18,20 @@ class Segment(BaseModel):
     end: float = Field(description="End time of the segment.")
     type: SegmentType = Field(description="Type of the segment.")
     audio_path: str | None = Field(default=None, exclude=True)
+    midi_path: str | None = Field(default=None, exclude=True)
 
 
 class GeminiAnalysis(BaseModel):
     segments: list[Segment] = Field(description="List of audio segments.")
+
+
+class SegmentMidiResult(BaseModel):
+    segment_index: int
+    segment_type: SegmentType
+    midi_path: str | None = None
+    start_offset: float
+    instrument: str
+    error: str | None = None
 
 
 class JobStatus(BaseModel):

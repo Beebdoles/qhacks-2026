@@ -20,8 +20,7 @@ export const TRACK_COLORS = [
 export const PIPELINE_STAGES: Record<string, string> = {
   pending: "Waiting in queue…",
   gemini_analysis: "Analyzing audio with Gemini…",
-  score_building: "Building musical score…",
-  instrument_mapping: "Mapping instruments…",
+  audio_splitting: "Splitting audio segments…",
   midi_generation: "Generating MIDI tracks…",
   midi_merging: "Merging MIDI files…",
   complete: "Complete!",

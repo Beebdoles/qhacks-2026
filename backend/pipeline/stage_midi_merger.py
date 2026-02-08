@@ -1,42 +1,72 @@
-import mido
+import pretty_midi
+
+from models import SegmentMidiResult
 
 
 def run_midi_merger_stage(
-    mapped_midis: dict[str, str], output_path: str
+    midi_results: list[SegmentMidiResult], output_path: str
 ) -> str:
-    """Merge per-type mapped MIDIs into a single Type 1 multi-track MIDI.
+    """Merge per-segment MIDI files into a single multi-track MIDI.
+
+    Uses pretty_midi. Time-shifts each segment's notes by its start_offset
+    so they sit at the correct position in the global timeline.
 
     Returns the output file path.
     """
-    combined = mido.MidiFile(type=1)
-    ticks = None
-    tempo_track_added = False
+    # Filter to successful results only
+    successes = [
+        r for r in midi_results
+        if r.midi_path is not None and r.error is None
+    ]
 
-    for seg_type, path in mapped_midis.items():
-        mid = mido.MidiFile(path)
-        if ticks is None:
-            combined.ticks_per_beat = mid.ticks_per_beat
-            ticks = mid.ticks_per_beat
+    if not successes:
+        # Write an empty MIDI to prevent frontend 404
+        empty = pretty_midi.PrettyMIDI(initial_tempo=120)
+        empty.write(output_path)
+        print("[midi_merger] No successful segments — wrote empty MIDI")
+        return output_path
 
-        for track in mid.tracks:
-            new_track = mido.MidiTrack()
-            new_track.append(
-                mido.MetaMessage("track_name", name=seg_type, time=0)
+    # Use first segment's tempo
+    first_midi = pretty_midi.PrettyMIDI(successes[0].midi_path)
+    tempos = first_midi.get_tempo_changes()
+    base_tempo = tempos[1][0] if len(tempos[1]) > 0 else 120.0
+
+    merged = pretty_midi.PrettyMIDI(initial_tempo=base_tempo)
+
+    for result in successes:
+        seg_midi = pretty_midi.PrettyMIDI(result.midi_path)
+        seg_type = result.segment_type.value
+        track_name = f"{seg_type}_{result.segment_index}"
+
+        for src_inst in seg_midi.instruments:
+            inst = pretty_midi.Instrument(
+                program=src_inst.program,
+                is_drum=src_inst.is_drum,
+                name=track_name,
             )
 
-            for msg in track:
-                # Deduplicate tempo/time_signature meta events
-                if msg.is_meta and msg.type in ("set_tempo", "time_signature"):
-                    if not tempo_track_added:
-                        new_track.append(msg)
-                    continue
-                if msg.is_meta and msg.type == "track_name":
-                    continue
-                new_track.append(msg)
+            # Time-shift notes by segment start offset
+            for note in src_inst.notes:
+                shifted = pretty_midi.Note(
+                    velocity=note.velocity,
+                    pitch=note.pitch,
+                    start=note.start + result.start_offset,
+                    end=note.end + result.start_offset,
+                )
+                inst.notes.append(shifted)
 
-            combined.tracks.append(new_track)
-            tempo_track_added = True
+            # Time-shift control changes
+            for cc in src_inst.control_changes:
+                cc.time += result.start_offset
+                inst.control_changes.append(cc)
 
-    combined.save(output_path)
-    print(f"[midi_merger] Merged {len(mapped_midis)} tracks -> {output_path}")
+            # Time-shift pitch bends
+            for pb in src_inst.pitch_bends:
+                pb.time += result.start_offset
+                inst.pitch_bends.append(pb)
+
+            merged.instruments.append(inst)
+
+    merged.write(output_path)
+    print(f"[midi_merger] Merged {len(successes)} segments -> {output_path}")
     return output_path

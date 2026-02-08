@@ -4,6 +4,11 @@ python-multipart
 pydantic
 google-genai
 python-dotenv
-# musiclang
-# numpy<2.0
 mido
+numpy<2.0
+torch
+torchcrepe
+librosa
+soundfile
+pretty_midi
+scipy

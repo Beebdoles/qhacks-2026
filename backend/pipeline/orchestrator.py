@@ -5,7 +5,8 @@ import traceback
 from models import JobStatus
 from pipeline.stage_gemini import run_gemini_stage
 from pipeline.stage_audio_splitter import run_audio_splitter_stage
-# Future: from pipeline.stage_midi_merger import run_midi_merger_stage
+from pipeline.stage_audio_to_midi import run_audio_to_midi_stage
+from pipeline.stage_midi_merger import run_midi_merger_stage
 
 # In-memory job store
 jobs: dict[str, JobStatus] = {}
@@ -38,12 +39,12 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         analysis = run_gemini_stage(job_id, upload_path)
 
         job.segments = analysis.segments
-        job.progress = 50
+        job.progress = 40
         print(f"{tag} Stage 1 complete. {len(analysis.segments)} segments.")
 
         # ── Stage 2: Audio Splitting ─────────────────────────────────
         job.stage = "audio_splitting"
-        job.progress = 55
+        job.progress = 40
         print(f"{tag} Stage 2: Splitting audio by segment...")
 
         non_silence_segments = run_audio_splitter_stage(
@@ -51,16 +52,43 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         )
 
         job.segments = non_silence_segments
+        job.progress = 50
+        print(f"{tag} Stage 2 complete. {len(non_silence_segments)} non-silence segments.")
+
+        # ── Stage 3: Audio-to-MIDI ───────────────────────────────────
+        job.stage = "midi_generation"
+        job.progress = 50
+        print(f"{tag} Stage 3: Converting audio segments to MIDI...")
+
+        eligible = [
+            s for s in non_silence_segments
+            if s.type.value in {"singing", "humming", "beatboxing"}
+        ]
+        n_eligible = max(len(eligible), 1)
+
+        def progress_callback(i: int) -> None:
+            job.progress = 50 + int(40 * (i + 1) / n_eligible)
+
+        midi_results = run_audio_to_midi_stage(
+            non_silence_segments, job_dir, progress_callback
+        )
+
+        job.progress = 90
+        print(f"{tag} Stage 3 complete. {len(midi_results)} MIDI results.")
+
+        # ── Stage 4: MIDI Merger ─────────────────────────────────────
+        job.stage = "midi_merging"
+        job.progress = 90
+        print(f"{tag} Stage 4: Merging MIDI files...")
+
+        output_path = os.path.join(job_dir, "output.mid")
+        run_midi_merger_stage(midi_results, output_path)
+
+        job.midi_path = output_path
         job.progress = 100
         job.stage = "complete"
         job.status = "complete"
-        print(f"{tag} Pipeline complete! {len(non_silence_segments)} non-silence segments.")
-
-        # Future: MIDI merger stage
-        # job.stage = "midi_merging"
-        # output_path = os.path.join(job_dir, "output.mid")
-        # run_midi_merger_stage(mapped_midis, output_path)
-        # job.midi_path = output_path
+        print(f"{tag} Pipeline complete!")
 
     except Exception as e:
         job.status = "failed"
