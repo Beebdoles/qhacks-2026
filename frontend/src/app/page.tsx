@@ -11,17 +11,16 @@ import StatusBar from "@/components/StatusBar";
 import EditProgressToast from "@/components/EditProgressToast";
 import EditErrorModal from "@/components/EditErrorModal";
 import { audioEngine, setStoreGetter } from "@/lib/AudioEngine";
-import { fetchMidiAsArrayBuffer, parseMidiToTracks } from "@/lib/midi-utils";
+import { loadAllSavedTracks } from "@/lib/midi-utils";
 
 // Register store getter for AudioEngine (avoids circular import)
 setStoreGetter(() => useEditorStore.getState());
 
-async function reloadMidi(jobId: string) {
+async function reloadTracks() {
   audioEngine.stop();
   useEditorStore.getState().setPlaying(false);
 
-  const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi`);
-  const { tracks, duration, bpm, timeSignature } = parseMidiToTracks(arrayBuffer);
+  const { tracks, duration, bpm, timeSignature } = await loadAllSavedTracks();
 
   const store = useEditorStore.getState();
   store.setTracks(tracks);
@@ -47,18 +46,47 @@ export default function Home() {
   // Poll for edit pipeline progress (only when editing)
   const editJob = useJobPolling(isEditing ? jobId : null, editGeneration);
 
-  // When entering editor phase, fetch and load MIDI
+  // On startup, check if saved_tracks/ has files → go straight to editor
   useEffect(() => {
-    if (phase !== "editor" || !jobId) return;
+    if (phase !== "empty") return;
 
     let cancelled = false;
 
-    async function loadMidi() {
+    async function checkSavedTracks() {
       try {
-        const arrayBuffer = await fetchMidiAsArrayBuffer(`/api/jobs/${jobId}/midi`);
-        if (cancelled) return;
+        const { tracks, duration, bpm, timeSignature } = await loadAllSavedTracks();
+        if (cancelled || tracks.length === 0) return;
 
-        const { tracks, duration, bpm, timeSignature } = parseMidiToTracks(arrayBuffer);
+        const store = useEditorStore.getState();
+        store.setTracks(tracks);
+        store.setBpm(bpm);
+        store.setTimeSignature(timeSignature);
+        store.setTotalDuration(duration);
+        store.setCurrentTime(0);
+        store.setPhase("editor");
+
+        await audioEngine.loadTracks(tracks);
+      } catch (err) {
+        console.error("Failed to check saved tracks:", err);
+      }
+    }
+
+    checkSavedTracks();
+    return () => { cancelled = true; };
+  }, [phase]);
+
+  // When entering editor phase (from pipeline), reload all saved tracks
+  useEffect(() => {
+    if (phase !== "editor") return;
+    // Skip if tracks are already loaded (e.g. from startup check above)
+    if (useEditorStore.getState().tracks.length > 0) return;
+
+    let cancelled = false;
+
+    async function loadTracks() {
+      try {
+        const { tracks, duration, bpm, timeSignature } = await loadAllSavedTracks();
+        if (cancelled) return;
 
         const store = useEditorStore.getState();
         store.setTracks(tracks);
@@ -69,13 +97,13 @@ export default function Home() {
 
         await audioEngine.loadTracks(tracks);
       } catch (err) {
-        console.error("Failed to load MIDI:", err);
+        console.error("Failed to load tracks:", err);
       }
     }
 
-    loadMidi();
+    loadTracks();
     return () => { cancelled = true; };
-  }, [phase, jobId]);
+  }, [phase]);
 
   // Handle edit pipeline completion: reload MIDI when done
   useEffect(() => {
@@ -96,10 +124,10 @@ export default function Home() {
         return;
       }
 
-      console.log("[edit] Edit pipeline complete, reloading MIDI...");
-      reloadMidi(editJob.id)
-        .then(() => console.log("[edit] MIDI reloaded successfully"))
-        .catch((err) => console.error("[edit] Failed to reload MIDI:", err))
+      console.log("[edit] Edit pipeline complete, reloading tracks...");
+      reloadTracks()
+        .then(() => console.log("[edit] Tracks reloaded successfully"))
+        .catch((err) => console.error("[edit] Failed to reload tracks:", err))
         .finally(() => useEditorStore.getState().setIsEditing(false));
     } else if (editJob.status === "failed") {
       console.error("[edit] Edit pipeline failed:", editJob.error);

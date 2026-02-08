@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers.upload import router as upload_router, _executor
+from routers.tracks import router as tracks_router
 
 app = FastAPI()
 
@@ -31,11 +32,13 @@ async def log_requests(request, call_next):
 
 
 app.include_router(upload_router)
+app.include_router(tracks_router)
 
 
 @app.on_event("startup")
 def startup():
     os.makedirs("/tmp/audio_midi_jobs", exist_ok=True)
+    os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_tracks"), exist_ok=True)
     print("[startup] Server ready to accept requests")
 
 

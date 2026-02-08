@@ -50,15 +50,33 @@ export default function VoiceInputCard() {
     formData.append("file", file);
 
     try {
-      if (isEditorMode && store.jobId) {
-        // Edit flow: send voice command to existing job
+      if (isEditorMode) {
+        // Edit flow: send voice command to modify existing tracks
         store.setIsEditing(true);
         store.bumpEditGeneration();
-        const res = await fetch(`/api/jobs/${store.jobId}/edit`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!res.ok) throw new Error("Edit upload failed");
+
+        let editJobId: string;
+
+        if (store.jobId) {
+          // Existing job — use job-scoped edit endpoint
+          const res = await fetch(`/api/jobs/${store.jobId}/edit`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) throw new Error("Edit upload failed");
+          editJobId = store.jobId;
+        } else {
+          // No job yet (started from saved_tracks) — use standalone edit
+          const res = await fetch("/api/edit", {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) throw new Error("Edit upload failed");
+          const data = await res.json();
+          editJobId = data.job_id;
+          setJobId(editJobId);
+        }
+
         // Stay in editor phase, polling will pick up progress
         setVoiceState("ready");
         setRecordedFile(null);

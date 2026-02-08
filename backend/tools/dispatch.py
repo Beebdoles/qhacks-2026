@@ -8,6 +8,7 @@ import shutil
 from intent.schema import ToolCall, ToolName
 from tools.pitch_shift import run_pitch_shift
 from tools.progression_change import run_progression_change
+from tools.switch_instrument import run_switch_instrument
 
 
 # Default location for user's saved tracks
@@ -34,14 +35,22 @@ def resolve_midi_path(tool_call: ToolCall, job_dir: str) -> str:
     """
     target = (tool_call.params.get("target_description") or "").strip().lower()
 
-    # 1. Check saved_tracks/ — copy into job_dir so tools don't mutate originals
-    if target and os.path.isdir(SAVED_TRACKS_DIR):
-        for path in glob.glob(os.path.join(SAVED_TRACKS_DIR, "*.mid")):
-            name = os.path.splitext(os.path.basename(path))[0].lower()
-            if name in target or target in name or _words_overlap(target, name):
-                dest = os.path.join(job_dir, "output.mid")
-                shutil.copy2(path, dest)
-                return dest
+    # 1. Check saved_tracks/ — return path directly so tools modify in place
+    if os.path.isdir(SAVED_TRACKS_DIR):
+        saved = sorted(glob.glob(os.path.join(SAVED_TRACKS_DIR, "*.mid")))
+        if target:
+            # Match by name when a target is specified
+            for path in saved:
+                name = os.path.splitext(os.path.basename(path))[0].lower()
+                if name in target or target in name or _words_overlap(target, name):
+                    return path
+        elif len(saved) == 1:
+            # Only one track — use it
+            return saved[0]
+        elif saved:
+            # Multiple tracks, no target — fall through to let tool pick
+            # but if nothing else matches below, use first saved track
+            pass
 
     # 2. Check for per-type MIDIs in job dir that match the description
     if target:
@@ -59,6 +68,12 @@ def resolve_midi_path(tool_call: ToolCall, job_dir: str) -> str:
     mids = sorted(glob.glob(os.path.join(job_dir, "*.mid")))
     if mids:
         return mids[0]
+
+    # 5. Fallback: first .mid in saved_tracks/
+    if os.path.isdir(SAVED_TRACKS_DIR):
+        saved = sorted(glob.glob(os.path.join(SAVED_TRACKS_DIR, "*.mid")))
+        if saved:
+            return saved[0]
 
     raise FileNotFoundError(
         f"No MIDI file found for target {target!r} in saved_tracks/ or {job_dir}"
@@ -87,12 +102,25 @@ def dispatch_tool_call(tool_call: ToolCall, job_dir: str) -> str:
         print(f"{tag} progression_change → {midi_path}")
         return run_progression_change(tool_call, midi_path)
 
+    if tool_call.tool == ToolName.switch_instrument:
+        midi_path = resolve_midi_path(tool_call, job_dir)
+        print(f"{tag} switch_instrument → {midi_path}")
+        result = run_switch_instrument(tool_call, midi_path)
+
+        # Rename the file in saved_tracks/ to match the new instrument,
+        # replacing any existing file with that name
+        new_instrument = tool_call.params.get("instrument", "")
+        if new_instrument and midi_path.startswith(SAVED_TRACKS_DIR):
+            new_path = os.path.join(SAVED_TRACKS_DIR, f"{new_instrument}.mid")
+            if new_path != midi_path:
+                os.replace(midi_path, new_path)
+                print(f"{tag} Replaced {os.path.basename(midi_path)} → {os.path.basename(new_path)}")
+
+        return result
+
     # TODO: wire up remaining tools
     # if tool_call.tool == ToolName.mp3_to_midi:
     #     return run_mp3_to_midi(tool_call, job_dir)
-    # if tool_call.tool == ToolName.switch_instrument:
-    #     midi_path = resolve_midi_path(tool_call, job_dir)
-    #     return run_switch_instrument(tool_call, midi_path)
     # if tool_call.tool == ToolName.repeat_track:
     #     midi_path = resolve_midi_path(tool_call, job_dir)
     #     return run_repeat_track(tool_call, midi_path)

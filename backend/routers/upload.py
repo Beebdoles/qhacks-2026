@@ -111,6 +111,45 @@ async def edit_job(job_id: str, file: UploadFile):
     return {"job_id": job_id, "status": "processing"}
 
 
+@router.post("/edit")
+async def standalone_edit(file: UploadFile):
+    """Accept a voice command recording without an existing job.
+
+    Creates a fresh job, runs the lightweight edit pipeline (transcribe →
+    intent → tool dispatch against saved_tracks/), and returns the new job_id
+    so the frontend can poll for progress.
+    """
+    print(f"[edit] Received standalone edit: {file.filename}")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {ext}. Allowed: MP3, WebM.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    job_id = str(uuid.uuid4())
+    job_dir = os.path.join("/tmp", "audio_midi_jobs", job_id)
+    os.makedirs(job_dir, exist_ok=True)
+
+    edit_path = os.path.join(job_dir, f"edit_input{ext}")
+    with open(edit_path, "wb") as f:
+        f.write(content)
+
+    jobs[job_id] = JobStatus(id=job_id, status="pending", progress=0)
+
+    _executor.submit(run_edit_pipeline, job_id, edit_path)
+
+    return {"job_id": job_id}
+
+
 @router.get("/jobs/{job_id}/midi")
 async def get_midi(job_id: str):
     job = jobs.get(job_id)

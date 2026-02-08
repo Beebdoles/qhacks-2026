@@ -91,6 +91,29 @@ def run_pipeline(job_id: str, audio_path: str) -> None:
         job.progress = 80
         print(f"{tag} Stage 3 complete.")
 
+        # ── Stage 3.5: Save individual tracks to saved_tracks/ ─────
+        saved_tracks_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "saved_tracks",
+        )
+        os.makedirs(saved_tracks_dir, exist_ok=True)
+
+        for seg_type, mapped_path in mapped_midis.items():
+            if seg_type == "beatboxing":
+                track_name = "drums"
+            else:
+                track_name = analysis.singing_instrument.value  # "piano" or "flute"
+
+            dest = os.path.join(saved_tracks_dir, f"{track_name}.mid")
+            # Deduplication: append _2, _3, etc. if name already exists
+            counter = 2
+            while os.path.isfile(dest):
+                dest = os.path.join(saved_tracks_dir, f"{track_name}_{counter}.mid")
+                counter += 1
+
+            shutil.copy2(mapped_path, dest)
+            print(f"{tag} Saved track: {os.path.basename(dest)}")
+
         # ── Stage 4: MIDI Merger ────────────────────────────────────
         job.stage = "midi_merging"
         job.progress = 85
