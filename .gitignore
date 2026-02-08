@@ -30,3 +30,6 @@ Thumbs.db
 # Local experiments
 robert-test/
 chloe-test/
+
+# log file 
+/log_files/
