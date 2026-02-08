@@ -18,6 +18,7 @@ interface EditorState {
   setTracks: (tracks: TrackState[]) => void;
   toggleMute: (index: number) => void;
   toggleVisible: (index: number) => void;
+  renameTrack: (index: number, newName: string, newFilename: string) => void;
 
   // Transport
   transport: TransportState;
@@ -69,6 +70,12 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((s) => ({
       tracks: s.tracks.map((t) =>
         t.index === index ? { ...t, visible: !t.visible } : t
+      ),
+    })),
+  renameTrack: (index, newName, newFilename) =>
+    set((s) => ({
+      tracks: s.tracks.map((t) =>
+        t.index === index ? { ...t, name: newName, filename: newFilename } : t
       ),
     })),
 

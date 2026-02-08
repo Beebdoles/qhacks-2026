@@ -36,7 +36,7 @@ class AudioEngine {
   }
 
   async loadTracks(tracks: TrackState[]): Promise<void> {
-    await this.ensureStarted();
+    await loadDeps();
     if (!Tone || !Soundfont) return;
 
     // Dispose old channels
@@ -131,7 +131,7 @@ class AudioEngine {
           // Check real-time mute state via store getter
           if (getStoreState) {
             const currentTrack = getStoreState().tracks.find((t: TrackState) => t.index === track.index);
-            if (currentTrack?.muted) return;
+            if (currentTrack?.muted || !currentTrack?.visible) return;
           }
           channel.instrument.play(note.name, time, {
             duration: note.duration,

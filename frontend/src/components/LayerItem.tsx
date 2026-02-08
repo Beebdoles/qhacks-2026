@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { useEditorStore } from "@/stores/editorStore";
 import type { TrackState } from "@/types/editor";
 
@@ -10,6 +11,45 @@ interface LayerItemProps {
 export default function LayerItem({ track }: LayerItemProps) {
   const toggleMute = useEditorStore((s) => s.toggleMute);
   const toggleVisible = useEditorStore((s) => s.toggleVisible);
+  const renameTrack = useEditorStore((s) => s.renameTrack);
+
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(track.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  async function commitRename() {
+    const newName = editValue.trim();
+    setEditing(false);
+    if (!newName || newName === track.name) return;
+
+    const newFilename = newName.replace(/\s+/g, "_");
+
+    try {
+      const res = await fetch(`/api/tracks/${track.filename}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ new_name: newFilename }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        console.error("Rename failed:", err.detail);
+        setEditValue(track.name);
+        return;
+      }
+      const data = await res.json();
+      renameTrack(track.index, newName, data.filename);
+    } catch (e) {
+      console.error("Rename error:", e);
+      setEditValue(track.name);
+    }
+  }
 
   return (
     <div
@@ -25,7 +65,27 @@ export default function LayerItem({ track }: LayerItemProps) {
 
       {/* Name and instrument */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-text-primary truncate">{track.name}</p>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") { setEditing(false); setEditValue(track.name); }
+            }}
+            onBlur={commitRename}
+            className="text-sm font-medium text-text-primary bg-surface-600 rounded px-1 w-full outline-none"
+          />
+        ) : (
+          <p
+            className="text-sm font-medium text-text-primary truncate cursor-pointer"
+            onDoubleClick={() => { setEditValue(track.name); setEditing(true); }}
+            title="Double-click to rename"
+          >
+            {track.name}
+          </p>
+        )}
         <p className="text-xs text-text-tertiary truncate">{track.instrument}</p>
       </div>
 

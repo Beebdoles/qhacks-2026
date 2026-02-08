@@ -105,7 +105,19 @@ Output:
 {"tool_calls": [{"tool": "repeat_track", "instruction": "Repeat the drum track 3 times", \
 "audio_segment": null, "params": {"times": 3, "target_description": "the drum track"}}]}
 
-### Example 6: Pitch shift (speech only)
+### Example 6: Target by track name
+Timeline:
+[0.0s - 5.0s | SPEECH]: "Transpose the jazz melody up by 5 semitones"
+
+Available tracks: drums, jazz_melody, piano
+
+Segments: (no musical segments)
+
+Output:
+{"tool_calls": [{"tool": "pitch_shift", "instruction": "Transpose the jazz melody track up by 5 semitones", \
+"audio_segment": null, "params": {"semitones": 5, "target_description": "jazz_melody"}}]}
+
+### Example 7: Pitch shift (speech only)
 Timeline:
 [0.0s - 5.0s | SPEECH]: "Shift the piano track up by twelve semitones"
 
@@ -115,3 +127,18 @@ Output:
 {"tool_calls": [{"tool": "pitch_shift", "instruction": "Shift the piano track up by 12 semitones", \
 "audio_segment": null, "params": {"semitones": 12, "target_description": "the piano track"}}]}
 """
+
+
+def build_available_tracks_section(track_names: list[str]) -> str:
+    """Build a prompt section listing available tracks for target_description matching."""
+    if not track_names:
+        return ""
+
+    names_list = ", ".join(track_names)
+    return (
+        f"\n\n## Available tracks in the project\n\n"
+        f"The user currently has these tracks saved: {names_list}\n\n"
+        f"When the user refers to a track, use the closest matching track name from this "
+        f"list as the target_description value (e.g. if the user says \"shift the jazz melody\" "
+        f"and there is a track called \"jazz_melody\", set target_description to \"jazz_melody\")."
+    )

@@ -5,7 +5,7 @@ import os
 from models import Segment, SegmentType
 from pydantic import ValidationError
 
-from intent.prompts import TOOL_PICKER_PROMPT
+from intent.prompts import TOOL_PICKER_PROMPT, build_available_tracks_section
 from intent.schema import ToolPickerOutput
 
 MODEL = "gemini-2.0-flash"
@@ -48,13 +48,19 @@ def _build_segment_table(segments: list[Segment]) -> str:
     return header + "\n" + "\n".join(rows)
 
 
-def pick_tools(instruction_doc: str, segments: list[Segment]) -> ToolPickerOutput:
+def pick_tools(
+    instruction_doc: str,
+    segments: list[Segment],
+    available_tracks: list[str] | None = None,
+) -> ToolPickerOutput:
     """Feed the full instruction doc + segment table to Gemini and get back tool calls.
 
     Args:
         instruction_doc: The interleaved timeline from stage_transcribe
             (speech transcriptions + musical segment summaries with file paths).
         segments: The full list of Segment objects from GeminiAnalysis.
+        available_tracks: Names of saved track files (without .mid) so the LLM
+            can produce accurate target_description values.
 
     Returns:
         ToolPickerOutput with a list of ToolCall objects.
@@ -62,9 +68,11 @@ def pick_tools(instruction_doc: str, segments: list[Segment]) -> ToolPickerOutpu
     tag = "[tool-picker]"
 
     segment_table = _build_segment_table(segments)
+    tracks_section = build_available_tracks_section(available_tracks or [])
 
     prompt = (
-        f"{TOOL_PICKER_PROMPT}\n\n"
+        f"{TOOL_PICKER_PROMPT}"
+        f"{tracks_section}\n\n"
         f"## Timeline\n\n{instruction_doc}\n\n"
         f"## Segment reference table\n\n{segment_table}\n\n"
         f"Now output the tool_calls JSON."

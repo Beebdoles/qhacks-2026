@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import glob
 import json
 import os
 
 from models import GeminiAnalysis
 from intent.parser import pick_tools
 from intent.normalize import normalize_params
+
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SAVED_TRACKS_DIR = os.path.join(_BACKEND_DIR, "saved_tracks")
 
 
 def run_intent_stage(
@@ -19,8 +23,16 @@ def run_intent_stage(
 
     print(f"{tag} Running tool picker on instruction doc ({len(instruction_doc)} chars)...")
 
+    # Discover saved track names so the LLM can match user references
+    available_tracks: list[str] = []
+    if os.path.isdir(_SAVED_TRACKS_DIR):
+        for path in sorted(glob.glob(os.path.join(_SAVED_TRACKS_DIR, "*.mid"))):
+            available_tracks.append(os.path.splitext(os.path.basename(path))[0])
+    if available_tracks:
+        print(f"{tag} Available tracks: {available_tracks}")
+
     segments = analysis.segments if analysis else []
-    result = pick_tools(instruction_doc, segments)
+    result = pick_tools(instruction_doc, segments, available_tracks=available_tracks)
 
     # Normalize params for each tool call
     for tc in result.tool_calls:

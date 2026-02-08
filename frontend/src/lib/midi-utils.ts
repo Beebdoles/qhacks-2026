@@ -49,6 +49,7 @@ export function parseMidiToTracks(arrayBuffer: ArrayBuffer): {
       return {
         index: i,
         name,
+        filename: "",
         instrument,
         programNumber,
         channel,
@@ -106,6 +107,7 @@ export async function loadAllSavedTracks(): Promise<{
     const baseName = entry.filename.replace(/\.mid$/i, "").replace(/_/g, " ");
     for (const track of parsed.tracks) {
       track.name = baseName;
+      track.filename = entry.filename;
       allTracks.push(track);
     }
   }

@@ -57,6 +57,9 @@ export default function Home() {
         const { tracks, duration, bpm, timeSignature } = await loadAllSavedTracks();
         if (cancelled || tracks.length === 0) return;
 
+        await audioEngine.loadTracks(tracks);
+        if (cancelled) return;
+
         const store = useEditorStore.getState();
         store.setTracks(tracks);
         store.setBpm(bpm);
@@ -64,8 +67,6 @@ export default function Home() {
         store.setTotalDuration(duration);
         store.setCurrentTime(0);
         store.setPhase("editor");
-
-        await audioEngine.loadTracks(tracks);
       } catch (err) {
         console.error("Failed to check saved tracks:", err);
       }
@@ -88,14 +89,15 @@ export default function Home() {
         const { tracks, duration, bpm, timeSignature } = await loadAllSavedTracks();
         if (cancelled) return;
 
+        await audioEngine.loadTracks(tracks);
+        if (cancelled) return;
+
         const store = useEditorStore.getState();
         store.setTracks(tracks);
         store.setBpm(bpm);
         store.setTimeSignature(timeSignature);
         store.setTotalDuration(duration);
         store.setCurrentTime(0);
-
-        await audioEngine.loadTracks(tracks);
       } catch (err) {
         console.error("Failed to load tracks:", err);
       }
@@ -140,7 +142,7 @@ export default function Home() {
   useEffect(() => {
     const unsub = useEditorStore.subscribe((state) => {
       for (const track of state.tracks) {
-        audioEngine.setTrackMute(track.index, track.muted);
+        audioEngine.setTrackMute(track.index, track.muted || !track.visible);
       }
     });
     return unsub;

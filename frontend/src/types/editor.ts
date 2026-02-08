@@ -11,6 +11,7 @@ export interface NoteEvent {
 export interface TrackState {
   index: number;
   name: string;
+  filename: string;
   instrument: string;
   programNumber: number;
   channel: number;
