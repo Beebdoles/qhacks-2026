@@ -119,6 +119,14 @@ def audio_to_drum_midi(audio_path: str) -> pretty_midi.PrettyMIDI:
             )
             drum_inst.notes.append(note)
 
+    # Strip leading silence — shift all hits so the first starts at t=0
+    if drum_inst.notes:
+        min_start = min(n.start for n in drum_inst.notes)
+        if min_start > 0:
+            for n in drum_inst.notes:
+                n.start -= min_start
+                n.end -= min_start
+
     midi.instruments.append(drum_inst)
     print(f"[percussion] MIDI built: {len(drum_inst.notes)} drum hits")
 

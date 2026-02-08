@@ -121,5 +121,13 @@ def build_melody_midi(
         )
         instrument.notes.append(midi_note)
 
+    # Strip leading silence — shift all notes so the first starts at t=0
+    if instrument.notes:
+        min_start = min(n.start for n in instrument.notes)
+        if min_start > 0:
+            for n in instrument.notes:
+                n.start -= min_start
+                n.end -= min_start
+
     midi.instruments.append(instrument)
     return midi

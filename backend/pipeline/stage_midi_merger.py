@@ -26,6 +26,9 @@ def run_midi_merger_stage(
         print("[midi_merger] No successful segments — wrote empty MIDI")
         return output_path
 
+    # Normalize offsets so the first segment starts at time 0
+    min_offset = min(r.start_offset for r in successes)
+
     # Use first segment's tempo
     first_midi = pretty_midi.PrettyMIDI(successes[0].midi_path)
     tempos = first_midi.get_tempo_changes()
@@ -50,19 +53,19 @@ def run_midi_merger_stage(
                 shifted = pretty_midi.Note(
                     velocity=note.velocity,
                     pitch=note.pitch,
-                    start=note.start + result.start_offset,
-                    end=note.end + result.start_offset,
+                    start=note.start + result.start_offset - min_offset,
+                    end=note.end + result.start_offset - min_offset,
                 )
                 inst.notes.append(shifted)
 
             # Time-shift control changes
             for cc in src_inst.control_changes:
-                cc.time += result.start_offset
+                cc.time += result.start_offset - min_offset
                 inst.control_changes.append(cc)
 
             # Time-shift pitch bends
             for pb in src_inst.pitch_bends:
-                pb.time += result.start_offset
+                pb.time += result.start_offset - min_offset
                 inst.pitch_bends.append(pb)
 
             merged.instruments.append(inst)
